@@ -26,6 +26,12 @@ create table if not exists public.reports (
 );
 create index if not exists reports_observed_at_idx on public.reports (observed_at desc);
 
+-- Typ av rapport: observation (sett djuret), olycka (fordon) eller birdstrike (flygplan)
+alter table public.reports add column if not exists report_type text not null default 'observation';
+alter table public.reports drop constraint if exists reports_report_type_check;
+alter table public.reports add constraint reports_report_type_check
+  check (report_type in ('observation', 'olycka', 'birdstrike'));
+
 -- Profiler: en rad per användare (färg, medlem, admin)
 create table if not exists public.profiles (
   user_id    uuid primary key default auth.uid()

@@ -407,6 +407,76 @@ main { flex: 1; position: relative; overflow: hidden; }
 .leaflet-control-layers label { font-weight: 400; margin: 6px 0; font-size: 17px; }
 .leaflet-control-zoom a { width: 44px !important; height: 44px !important; line-height: 44px !important; font-size: 22px !important; }
 
+/* Varningstriangel för olycka och birdstrike */
+.tri {
+  position: relative;
+  display: inline-block;
+  width: var(--tri-size, 40px);
+  height: calc(var(--tri-size, 40px) * 0.9);
+  vertical-align: middle;
+}
+.tri svg { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45)); }
+.tri .tri-emoji {
+  position: absolute;
+  z-index: 1;  /* ovanpå triangeln (kartbiblioteket lägger annars svg:n överst) */
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  left: 0;
+  right: 0;
+  bottom: 12%;
+  text-align: center;
+  font-size: calc(var(--tri-size, 40px) * 0.42);
+  line-height: 1;
+}
+.tri .tri-dot {
+  position: absolute;
+  z-index: 1;
+  right: -2px;
+  bottom: -2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+.tri-wrap { background: none; border: none; }
+
+/* Val av rapporttyp i formuläret */
+.type-picker { display: flex; gap: 8px; }
+.type-picker button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 76px;
+  padding: 8px 4px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.type-picker .type-icon { font-size: 26px; line-height: 1; --tri-size: 32px; }
+.type-picker button.selected { border-color: var(--green); background: var(--green-light); box-shadow: inset 0 0 0 1px var(--green); }
+.type-picker button[data-type="olycka"].selected,
+.type-picker button[data-type="birdstrike"].selected { border-color: #d32f2f; background: #fdecea; box-shadow: inset 0 0 0 1px #d32f2f; }
+#filter-type { --tri-size: 20px; }
+#filter-type button { font-size: 14px; padding: 0 2px; }
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fdecea;
+  color: #b3261e;
+  font-size: 13px;
+  font-weight: 700;
+  --tri-size: 22px;
+}
+
 /* Namn på områden (GPX) */
 .leaflet-tooltip.area-label {
   background: rgba(255,255,255,0.85);

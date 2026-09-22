@@ -154,6 +154,53 @@ function canEdit(report) {
   return isAdmin || report.user_id === currentUser?.id;
 }
 
+// ---------- Rapporttyper ----------
+
+const REPORT_TYPES = {
+  observation: { label: 'Observation', plural: 'Observationer', emoji: null },
+  olycka:      { label: 'Olycka',      plural: 'Olyckor',       emoji: '🚗' },
+  birdstrike:  { label: 'Birdstrike',  plural: 'Birdstrikes',   emoji: '✈️' },
+};
+let selectedType = 'observation';
+
+function typeOf(report) {
+  return REPORT_TYPES[report.report_type] ? report.report_type : 'observation';
+}
+
+// Varningstriangel med en ikon i (bil eller flygplan). color = liten prick för rapportören.
+function triangleHtml(emoji, color) {
+  return `<span class="tri"><svg viewBox="0 0 44 40" aria-hidden="true">
+      <path d="M22 3 L41 37 H3 Z" fill="#ffd60a" stroke="#d32f2f" stroke-width="4" stroke-linejoin="round"/>
+    </svg><span class="tri-emoji">${emoji}</span>${color ? `<span class="tri-dot" style="background:${color}"></span>` : ''}</span>`;
+}
+
+// Liten etikett "⚠ Olycka" i listan och i nålens ruta
+function typeBadge(report) {
+  const t = REPORT_TYPES[typeOf(report)];
+  return t.emoji ? `<span class="type-badge">${triangleHtml(t.emoji)} ${t.label}</span>` : '';
+}
+
+// Fyll i trianglarna i knapparna (element med data-triangle="🚗")
+document.querySelectorAll('[data-triangle]').forEach((el) => { el.innerHTML = triangleHtml(el.dataset.triangle); });
+
+function setReportType(type) {
+  selectedType = REPORT_TYPES[type] ? type : 'observation';
+  document.querySelectorAll('#type-picker [data-type]').forEach((b) => {
+    b.classList.toggle('selected', b.dataset.type === selectedType);
+  });
+  const isStrike = selectedType !== 'observation';
+  $('species-label').textContent = isStrike ? 'Viltslag' : 'Djurslag';
+  const verb = editingId ? 'Redigera' : 'Ny';
+  $('sheet-title').textContent = selectedType === 'observation'
+    ? (editingId ? 'Redigera rapport' : 'Ny rapport')
+    : `${verb} ${REPORT_TYPES[selectedType].label.toLowerCase()}`;
+}
+
+$('type-picker').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-type]');
+  if (b) setReportType(b.dataset.type);
+});
+
 // ---------- Färger ----------
 
 function defaultColor(userId) {
@@ -717,15 +764,25 @@ function renderMarkers(list) {
   markerLayer.clearLayers();
 
   for (const r of list) {
-    const marker = L.marker([r.lat, r.lng], {
-      icon: L.divIcon({
+    const type = REPORT_TYPES[typeOf(r)];
+    const icon = type.emoji
+      // Olycka/birdstrike: varningstriangel, liten prick i rapportörens färg
+      ? L.divIcon({
+        className: 'tri-wrap',
+        html: triangleHtml(type.emoji, colorFor(r.user_id)).replace('class="tri"', 'class="tri" style="--tri-size:44px"'),
+        iconSize: [44, 40],
+        iconAnchor: [22, 22],
+        popupAnchor: [0, -20],
+      })
+      : L.divIcon({
         className: 'pin-wrap',
         html: `<div class="pin" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</div>`,
         iconSize: [38, 38],
         iconAnchor: [19, 19],
         popupAnchor: [0, -18],
-      }),
-    });
+      });
+    // Olyckor och birdstrikes ligger överst så att de inte göms under vanliga nålar
+    const marker = L.marker([r.lat, r.lng], { icon, zIndexOffset: type.emoji ? 1000 : 0 });
     marker.bindPopup(() => popupHtml(r));
     marker.reportId = r.id;
     markerLayer.addLayer(marker);
@@ -736,6 +793,7 @@ function popupHtml(r) {
   const own = canEdit(r);
   return `
     <div class="popup">
+      ${typeBadge(r)}
       <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
       <p>🕒 ${formatDateTime(r.observed_at)}</p>
       <p><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(r.reporter_email)}</p>
@@ -781,6 +839,7 @@ async function loadReports() {
 
 const FILTER_KEY = 'viltrapport-filter';
 const EMPTY_FILTER = {
+  type: '',         // '' = alla, 'observation', 'olycka' eller 'birdstrike'
   animal: null,     // { type: 'kind' | 'group' | 'species', value, label, icon }
   reporter: '',     // '' = alla, 'me' = bara mina, annars ett user_id
   quick: '',        // '' | 'today' | '7' | '30'
@@ -828,6 +887,7 @@ function dateRange() {
 }
 
 function matchesFilter(r) {
+  if (filter.type && typeOf(r) !== filter.type) return false;
   const a = filter.animal;
   if (a?.type === 'kind' && kindOf(r.species) !== a.value) return false;
   if (a?.type === 'group' && groupOf(r.species) !== a.value) return false;
@@ -892,6 +952,10 @@ function dateLabel() {
 
 function renderFilterBar(shown) {
   const chips = [];
+  if (REPORT_TYPES[filter.type]) {
+    const t = REPORT_TYPES[filter.type];
+    chips.push(['type', `${t.emoji ? triangleHtml(t.emoji) : '👁️'} ${t.plural}`, true]);
+  }
   if (filter.animal) chips.push(['animal', `${filter.animal.icon} ${filter.animal.label}`]);
   if (filter.reporter) {
     const dot = filter.reporter === 'me' ? '' : `<span style="color:${colorFor(filter.reporter)}">●</span> `;
@@ -915,6 +979,7 @@ function renderFilterBar(shown) {
 $('filter-chips').addEventListener('click', (e) => {
   const chip = e.target.closest('[data-clear]');
   if (!chip) return;
+  if (chip.dataset.clear === 'type') setFilter({ type: '' });
   if (chip.dataset.clear === 'animal') setFilter({ animal: null });
   if (chip.dataset.clear === 'reporter') setFilter({ reporter: '' });
   if (chip.dataset.clear === 'date') setFilter({ quick: '', from: '', to: '' });
@@ -927,6 +992,9 @@ function syncFilterForm() {
   $('filter-from').value = filter.quick ? '' : filter.from;
   $('filter-to').value = filter.quick ? '' : filter.to;
   $('sort').value = filter.sort;
+  document.querySelectorAll('#filter-type [data-type]').forEach((b) => {
+    b.classList.toggle('selected', b.dataset.type === filter.type);
+  });
   document.querySelectorAll('#filter-quick [data-quick]').forEach((b) => {
     b.classList.toggle('selected', b.dataset.quick === filter.quick && (filter.quick || (!filter.from && !filter.to)));
   });
@@ -953,6 +1021,10 @@ $('filter-reporter').addEventListener('change', (e) => setFilter({ reporter: e.t
 $('sort').addEventListener('change', (e) => setFilter({ sort: e.target.value }));
 $('filter-from').addEventListener('change', (e) => setFilter({ from: e.target.value, quick: '' }));
 $('filter-to').addEventListener('change', (e) => setFilter({ to: e.target.value, quick: '' }));
+$('filter-type').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-type]');
+  if (b) setFilter({ type: b.dataset.type });
+});
 $('filter-quick').addEventListener('click', (e) => {
   const b = e.target.closest('[data-quick]');
   if (b) setFilter({ quick: b.dataset.quick, from: '', to: '' });
@@ -1080,6 +1152,7 @@ function renderList(list) {
     const own = r.user_id === currentUser?.id;
     return `
       <li class="report-card ${own ? 'own' : ''}" style="border-left-color:${colorFor(r.user_id)}">
+        ${typeBadge(r)}
         <h3><span class="card-icon" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</span>
             ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
         <p>🕒 ${formatDateTime(r.observed_at)}</p>
@@ -1136,7 +1209,7 @@ function showOnMap(report) {
 
 function openSheet(report = null) {
   editingId = report?.id ?? null;
-  $('sheet-title').textContent = report ? 'Redigera rapport' : 'Ny rapport';
+  setReportType(report ? typeOf(report) : 'observation');
   $('species').value = report?.species ?? '';
   $('animal-count').value = report?.animal_count ?? 1;
   $('observed-at').value = toLocalInput(report?.observed_at ?? new Date());
@@ -1201,6 +1274,7 @@ $('report-form').addEventListener('submit', async (e) => {
 
   const position = draftMarker.getLatLng();
   const payload = {
+    report_type: selectedType,
     species: speciesName,
     animal_count: parseInt($('animal-count').value, 10),
     observed_at: new Date($('observed-at').value).toISOString(),
@@ -1234,7 +1308,8 @@ $('report-form').addEventListener('submit', async (e) => {
     message.textContent = translateError(error);
     return;
   }
-  showToast(editingId ? 'Rapporten är uppdaterad' : 'Rapporten är sparad');
+  showToast(editingId ? 'Rapporten är uppdaterad'
+    : selectedType === 'observation' ? 'Rapporten är sparad' : `${REPORT_TYPES[selectedType].label} sparad`);
   closeSheet();
   loadReports();
 });

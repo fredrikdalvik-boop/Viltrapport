@@ -36,7 +36,8 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `supabase.sql` | Tabell, trigger och RLS-policies. Klistras in i Supabase SQL Editor |
 
 ## Databas (`public.reports`)
-`id, user_id, reporter_email, species, animal_count, observed_at, comment, lat, lng, created_at, updated_at`
+`id, user_id, reporter_email, report_type, species, animal_count, observed_at, comment, lat, lng, created_at, updated_at`
+- `report_type`: `observation` (standard), `olycka` (fordon) eller `birdstrike` (flygplan). Check-constraint i SQL.
 - Trigger `reports_set_owner` sätter `user_id` och `reporter_email` från den
   inloggades JWT vid insert och låser dem vid update. Appen skickar dem aldrig.
 - RLS är på. Medlemmar (`is_member()`): select alla, insert egna. Update/delete: ägaren eller admin (`is_admin()`). `anon`: ingen åtkomst.
@@ -64,6 +65,12 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Nålen = cirkel i rapportörens färg med djurgruppens emoji. Emoji som äldre telefoner saknar (🫎, 🪿, 🐦‍⬛) kontrolleras med canvas och byts mot `fallback`.
 - Skriver man en okänd art visas "Ny art!" med val av grupp. Arten sparas i `custom_species`.
 - Varje grupp i `SPECIES_GROUPS` har `kind`: `daggdjur`, `fagel` eller `annat`.
+
+## Rapporttyper
+- `REPORT_TYPES` i app.js. Väljs överst i formuläret (`#type-picker`). Vid olycka/birdstrike heter fältet "Viltslag".
+- Olycka/birdstrike ritas som gul varningstriangel (`triangleHtml()`, inline-SVG) med 🚗/✈️ och en prick i rapportörens färg,
+  `zIndexOffset: 1000` så att de ligger överst. Emojin har `z-index: 1` (Leaflet lägger annars svg:n överst).
+- Filtret har "Typ" (`filter.type`).
 
 ## Områden (GPX)
 - `data/omraden.gpx` (export från WeHunt, offentliga gränser) ritas ovanpå kartan av `loadAreas()`. Sökväg i `CONFIG.AREAS_GPX`.
