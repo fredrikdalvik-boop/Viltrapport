@@ -15,6 +15,14 @@ let map = null;
 let markerLayer = null;
 let draftMarker = null;   // nålen man placerar innan man sparar
 let editingId = null;     // id på rapporten som redigeras, annars null
+let userColors = new Map();   // user_id → vald färg
+let customSpecies = [];       // arter som användarna lagt till själva
+
+// Färger man kan välja mellan
+const COLORS = [
+  '#e53935', '#d81b60', '#8e24aa', '#3949ab', '#1e88e5', '#00acc1', '#00897b',
+  '#43a047', '#9e9d24', '#fdd835', '#fb8c00', '#6d4c41', '#546e7a', '#212121',
+];
 
 const $ = (id) => document.getElementById(id);
 
@@ -63,6 +71,132 @@ function translateError(error) {
   return 'Något gick fel: ' + msg;
 }
 
+// ---------- Arter och ikoner ----------
+
+// Alla arter (inbyggda + användarnas egna), sökbara på namn med små bokstäver
+function speciesIndex() {
+  const index = new Map();
+  for (const [name, group] of window.SPECIES) index.set(name.toLowerCase(), { name, group });
+  for (const s of customSpecies) {
+    const key = s.name.toLowerCase();
+    if (!index.has(key)) index.set(key, { name: s.name, group: s.category });
+  }
+  return index;
+}
+
+function findKnownSpecies(name) {
+  return speciesIndex().get(String(name ?? '').trim().toLowerCase()) ?? null;
+}
+
+// Kontrollerar om telefonen kan visa en viss ikon (nyare ikoner saknas på äldre telefoner)
+const emojiCache = {};
+function emojiSupported(emoji) {
+  if (emoji in emojiCache) return emojiCache[emoji];
+  let ok = true;
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = '32px sans-serif';
+    if (emoji.includes('\u200d')) {
+      // Sammansatt ikon som inte stöds blir två ikoner bredvid varandra
+      ok = ctx.measureText(emoji).width < ctx.measureText('🐦').width * 1.5;
+    } else {
+      canvas.width = canvas.height = 40;
+      ctx.font = '32px sans-serif';
+      ctx.textBaseline = 'top';
+      ctx.fillText(emoji, 0, 0);
+      const d = ctx.getImageData(0, 0, 40, 40).data;
+      ok = false;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] > 50 && (Math.abs(d[i] - d[i + 1]) > 25 || Math.abs(d[i + 1] - d[i + 2]) > 25)) {
+          ok = true;
+          break;
+        }
+      }
+    }
+  } catch {
+    ok = true;
+  }
+  return (emojiCache[emoji] = ok);
+}
+
+function iconFor(speciesName) {
+  const known = findKnownSpecies(speciesName);
+  const group = window.SPECIES_GROUPS[known?.group] ?? window.SPECIES_GROUPS.ovrigt;
+  return group.fallback && !emojiSupported(group.icon) ? group.fallback : group.icon;
+}
+
+function fillCategorySelect() {
+  const options = Object.entries(window.SPECIES_GROUPS)
+    .map(([key, g]) => `<option value="${key}">${g.icon} ${escapeHtml(g.label)}</option>`)
+    .join('');
+  $('category').innerHTML = '<option value="">Välj typ …</option>' + options;
+}
+fillCategorySelect();
+
+// Visa "Ny art!"-rutan om man skrivit en art som inte finns i listan
+// (men inte medan förslagslistan visas – då håller man troligen på att skriva)
+function updateCategoryVisibility() {
+  const value = $('species').value.trim();
+  const isNew = value.length > 0 && !findKnownSpecies(value) && $('species-suggestions').hidden;
+  $('category-wrap').hidden = !isNew;
+  $('category').required = isNew;
+}
+
+// ---------- Färger ----------
+
+function defaultColor(userId) {
+  let sum = 0;
+  for (const ch of String(userId)) sum += ch.charCodeAt(0);
+  return COLORS[sum % COLORS.length];
+}
+
+function colorFor(userId) {
+  return userColors.get(userId) ?? defaultColor(userId);
+}
+
+function renderColorPicker() {
+  const mine = colorFor(currentUser?.id);
+  $('color-picker').innerHTML = COLORS.map((c) => `
+    <button type="button" class="swatch ${c === mine ? 'selected' : ''}" data-color="${c}"
+            style="background:${c}" aria-label="Välj färg ${c}"></button>`).join('');
+}
+
+$('color-picker').addEventListener('click', async (e) => {
+  const swatch = e.target.closest('[data-color]');
+  if (!swatch) return;
+  const color = swatch.dataset.color;
+  const message = $('settings-message');
+  message.textContent = '';
+
+  const { error } = await db.from('profiles').upsert({ user_id: currentUser.id, color });
+  if (error) {
+    message.textContent = translateError(error);
+    return;
+  }
+  userColors.set(currentUser.id, color);
+  renderColorPicker();
+  render();
+  showToast('Din färg är sparad');
+});
+
+// ---------- Inställningar ----------
+
+function openSettings() {
+  closeSheet();
+  $('user-email').textContent = currentUser?.email ?? '';
+  $('settings-message').textContent = '';
+  renderColorPicker();
+  $('settings-sheet').hidden = false;
+}
+
+function closeSettings() {
+  $('settings-sheet').hidden = true;
+}
+
+$('settings-btn').addEventListener('click', openSettings);
+$('settings-close').addEventListener('click', closeSettings);
+
 // ---------- Inloggning ----------
 
 function showView(name) {
@@ -91,7 +225,6 @@ function handleSession(session) {
   }
 
   showView('app');
-  $('user-email').textContent = currentUser.email;
   initMap();
   loadReports();
 }
@@ -154,6 +287,7 @@ $('password-form').addEventListener('submit', async (e) => {
 
 $('logout-btn').addEventListener('click', async () => {
   closeSheet();
+  closeSettings();
   await db.auth.signOut();
 });
 
@@ -209,13 +343,14 @@ function renderMarkers(list) {
   markerLayer.clearLayers();
 
   for (const r of list) {
-    const own = r.user_id === currentUser?.id;
-    const marker = L.circleMarker([r.lat, r.lng], {
-      radius: 10,
-      weight: 3,
-      color: '#fff',
-      fillColor: own ? '#e8660c' : '#1f6fd1',
-      fillOpacity: 0.95,
+    const marker = L.marker([r.lat, r.lng], {
+      icon: L.divIcon({
+        className: 'pin-wrap',
+        html: `<div class="pin" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</div>`,
+        iconSize: [38, 38],
+        iconAnchor: [19, 19],
+        popupAnchor: [0, -18],
+      }),
     });
     marker.bindPopup(() => popupHtml(r));
     marker.reportId = r.id;
@@ -227,9 +362,9 @@ function popupHtml(r) {
   const own = r.user_id === currentUser?.id;
   return `
     <div class="popup">
-      <h3>${escapeHtml(r.species)} (${r.animal_count} st)</h3>
+      <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
       <p>🕒 ${formatDateTime(r.observed_at)}</p>
-      <p>👤 ${escapeHtml(r.reporter_email)}</p>
+      <p><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(r.reporter_email)}</p>
       ${r.comment ? `<p>💬 ${escapeHtml(r.comment)}</p>` : ''}
       ${own ? `
         <div class="actions">
@@ -242,17 +377,23 @@ function popupHtml(r) {
 // ---------- Hämta rapporter ----------
 
 async function loadReports() {
-  const { data, error } = await db
-    .from('reports')
-    .select('*')
-    .order('observed_at', { ascending: false })
-    .limit(5000);
+  const [reportsResult, profilesResult, speciesResult] = await Promise.all([
+    db.from('reports').select('*').order('observed_at', { ascending: false }).limit(5000),
+    db.from('profiles').select('user_id, color'),
+    db.from('custom_species').select('name, category').order('name'),
+  ]);
 
-  if (error) {
-    showToast(translateError(error));
+  if (reportsResult.error) {
+    showToast(translateError(reportsResult.error));
     return;
   }
-  reports = data;
+  // Färger och egna arter är "extra" – appen fungerar även om de inte går att hämta
+  if (profilesResult.error) console.warn('Profiler:', profilesResult.error.message);
+  else userColors = new Map(profilesResult.data.map((p) => [p.user_id, p.color]));
+  if (speciesResult.error) console.warn('Egna arter:', speciesResult.error.message);
+  else customSpecies = speciesResult.data;
+
+  reports = reportsResult.data;
   updateFilterOptions();
   render();
 }
@@ -320,8 +461,9 @@ function renderList(list) {
   $('report-list').innerHTML = list.map((r) => {
     const own = r.user_id === currentUser?.id;
     return `
-      <li class="report-card ${own ? 'own' : ''}">
-        <h3>${escapeHtml(r.species)} (${r.animal_count} st)</h3>
+      <li class="report-card ${own ? 'own' : ''}" style="border-left-color:${colorFor(r.user_id)}">
+        <h3><span class="card-icon" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</span>
+            ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
         <p>🕒 ${formatDateTime(r.observed_at)}</p>
         <p>👤 ${escapeHtml(r.reporter_email)}${own ? ' (du)' : ''}</p>
         ${r.comment ? `<p class="comment">💬 ${escapeHtml(r.comment)}</p>` : ''}
@@ -387,7 +529,10 @@ function openSheet(report = null) {
   $('observed-at').value = toLocalInput(report?.observed_at ?? new Date());
   $('comment').value = report?.comment ?? '';
   $('form-message').textContent = '';
+  $('category').value = '';
   hideSuggestions();
+  updateCategoryVisibility();
+  closeSettings();
   $('sheet').hidden = false;
   $('map-hint').hidden = true;
 }
@@ -428,9 +573,21 @@ $('report-form').addEventListener('submit', async (e) => {
     return;
   }
 
+  // Använd artens "riktiga" stavning om den finns i listan (t.ex. "rådjur" → "Rådjur")
+  const typed = $('species').value.trim();
+  const known = findKnownSpecies(typed);
+  const speciesName = known ? known.name : typed.charAt(0).toUpperCase() + typed.slice(1);
+
+  if (!known && !$('category').value) {
+    hideSuggestions();
+    message.textContent = 'Det här är en ny art – välj vilken sorts djur det är.';
+    $('category').focus();
+    return;
+  }
+
   const position = draftMarker.getLatLng();
   const payload = {
-    species: $('species').value.trim(),
+    species: speciesName,
     animal_count: parseInt($('animal-count').value, 10),
     observed_at: new Date($('observed-at').value).toISOString(),
     comment: $('comment').value.trim() || null,
@@ -441,6 +598,15 @@ $('report-form').addEventListener('submit', async (e) => {
   const saveBtn = $('save-btn');
   saveBtn.disabled = true;
   saveBtn.textContent = 'Sparar…';
+
+  // Ny art: spara den i listan så att alla får den som förslag
+  if (!known) {
+    const category = $('category').value || 'ovrigt';
+    const { error: speciesError } = await db.from('custom_species').insert({ name: speciesName, category });
+    // 23505 = arten finns redan (någon annan hann före) – det gör inget
+    if (speciesError && speciesError.code !== '23505') console.warn('Kunde inte spara ny art:', speciesError.message);
+    if (!speciesError) customSpecies.push({ name: speciesName, category });
+  }
 
   const query = editingId
     ? db.from('reports').update(payload).eq('id', editingId)
@@ -479,14 +645,16 @@ let activeSuggestion = -1;
 function findSpecies(query) {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const starts = window.SPECIES.filter((s) => s.toLowerCase().startsWith(q));
-  const contains = window.SPECIES.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
+  const names = [...speciesIndex().values()].map((s) => s.name);
+  const starts = names.filter((s) => s.toLowerCase().startsWith(q));
+  const contains = names.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
   return [...starts, ...contains].slice(0, 8);
 }
 
 function hideSuggestions() {
   $('species-suggestions').hidden = true;
   activeSuggestion = -1;
+  updateCategoryVisibility();
 }
 
 function showSuggestions() {
@@ -498,13 +666,15 @@ function showSuggestions() {
     return;
   }
   activeSuggestion = -1;
-  box.innerHTML = matches.map((s) => `<li role="option">${escapeHtml(s)}</li>`).join('');
+  box.innerHTML = matches.map((s) => `<li role="option" data-name="${escapeHtml(s)}">${iconFor(s)} ${escapeHtml(s)}</li>`).join('');
   box.hidden = false;
+  updateCategoryVisibility();
 }
 
 function chooseSuggestion(text) {
   $('species').value = text;
   hideSuggestions();
+  updateCategoryVisibility();
 }
 
 $('species').addEventListener('input', showSuggestions);
@@ -513,7 +683,7 @@ $('species').addEventListener('blur', () => setTimeout(hideSuggestions, 150));
 $('species-suggestions').addEventListener('mousedown', (e) => e.preventDefault());
 $('species-suggestions').addEventListener('click', (e) => {
   const li = e.target.closest('li');
-  if (li) chooseSuggestion(li.textContent);
+  if (li) chooseSuggestion(li.dataset.name);
 });
 
 $('species').addEventListener('keydown', (e) => {
@@ -526,7 +696,7 @@ $('species').addEventListener('keydown', (e) => {
     items.forEach((li, i) => li.classList.toggle('active', i === activeSuggestion));
   } else if (e.key === 'Enter' && activeSuggestion >= 0) {
     e.preventDefault();
-    chooseSuggestion(items[activeSuggestion].textContent);
+    chooseSuggestion(items[activeSuggestion].dataset.name);
   } else if (e.key === 'Escape') {
     hideSuggestions();
   }

@@ -94,6 +94,40 @@ input:focus, select:focus, textarea:focus {
 .auth-box h1 { text-align: center; color: var(--green); }
 .auth-logo { display: block; width: 72px; height: 72px; margin: 0 auto 8px; border-radius: 16px; }
 
+/* Startsidan med skog och jägare */
+.hero {
+  display: block;
+  padding: 0 0 32px;
+  background: #10121a;
+}
+.hero-scene {
+  height: 58vh;
+  min-height: 340px;
+  background: #16213d url("icons/scene.svg") center bottom / cover no-repeat;
+  display: flex;
+  justify-content: center;
+}
+.hero-scene-small { height: 38vh; min-height: 240px; }
+.hero-title {
+  margin: 0;
+  padding: calc(26px + env(safe-area-inset-top)) 16px 0;
+  font-family: "Alfa Slab One", Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(34px, 10vw, 60px);
+  line-height: 1.02;
+  text-align: center;
+  color: #ffe2a8;
+  text-shadow: 0 3px 16px rgba(0,0,0,0.55);
+}
+.hero-title span { color: #f7a35c; font-size: 0.72em; letter-spacing: 0.02em; }
+.hero .auth-box {
+  position: relative;
+  margin: -18px auto 0;
+  width: calc(100% - 32px);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+}
+.hero .btn-primary { background: #c8603f; }
+
 /* ===== Appens ramverk ===== */
 #app-view {
   height: 100%;
@@ -114,16 +148,16 @@ input:focus, select:focus, textarea:focus {
   background: var(--green);
   color: var(--white);
 }
-.topbar-title { font-weight: 700; font-size: 20px; }
-.topbar-user {
+.topbar-title {
   flex: 1;
-  font-size: 14px;
-  opacity: 0.85;
-  text-align: right;
+  min-width: 0;
+  font-family: "Alfa Slab One", Georgia, serif;
+  font-size: 17px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.topbar .btn-small { font-size: 22px; min-width: 48px; }
 
 .banner { background: #fff3cd; color: #6b4e00; padding: 8px 12px; font-size: 15px; text-align: center; }
 
@@ -181,6 +215,21 @@ main { flex: 1; position: relative; overflow: hidden; }
 .leaflet-control-layers label { font-weight: 400; margin: 6px 0; font-size: 17px; }
 .leaflet-control-zoom a { width: 44px !important; height: 44px !important; line-height: 44px !important; font-size: 22px !important; }
 
+/* Nålar på kartan: användarens färg + djurikon */
+.pin-wrap { background: none; border: none; }
+.pin {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+}
+
 .popup h3 { margin: 0 0 6px; font-size: 18px; }
 .popup p { margin: 3px 0; font-size: 15px; }
 .popup .actions { display: flex; gap: 8px; margin-top: 10px; }
@@ -210,7 +259,17 @@ main { flex: 1; position: relative; overflow: hidden; }
   border-left: 6px solid var(--blue);
 }
 .report-card.own { border-left-color: var(--orange); }
-.report-card h3 { margin: 0 0 4px; font-size: 19px; }
+.report-card h3 { margin: 0 0 4px; font-size: 19px; display: flex; align-items: center; gap: 8px; }
+.card-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
 .report-card p { margin: 3px 0; font-size: 15px; color: var(--muted); }
 .report-card .comment { color: var(--text); }
 .report-card .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
@@ -239,6 +298,26 @@ main { flex: 1; position: relative; overflow: hidden; }
 
 .sheet-buttons { display: flex; gap: 10px; margin-top: 14px; }
 .sheet-buttons .btn { flex: 1; margin-top: 0; }
+
+/* Ny art */
+.new-species {
+  background: #fff4e5;
+  border-radius: var(--radius);
+  padding: 2px 12px 8px;
+  margin-top: 10px;
+}
+
+/* Färgväljare */
+.color-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatch {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px var(--border);
+  cursor: pointer;
+}
+.swatch.selected { box-shadow: 0 0 0 4px var(--text); }
 
 /* Förslag på djurslag */
 .autocomplete { position: relative; }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Viltrapport</title>
+  <title>Charlies mega-ultra-viltrapport</title>
   <meta name="description" content="Rapportera vilt på flygplatsen">
   <meta name="theme-color" content="#1f5130">
   <link rel="manifest" href="manifest.json">
@@ -11,18 +11,22 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Viltrapport">
+  <meta name="apple-mobile-web-app-title" content="Charlies vilt">
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <!-- ===== Inloggning ===== -->
-  <section id="login-view" class="auth-view" hidden>
+  <section id="login-view" class="auth-view hero" hidden>
+    <div class="hero-scene" role="img" aria-label="Två jägare med gevär på ryggen går med en labrador och en beagle i skogen i solnedgången">
+      <h1 class="hero-title">Charlies<br><span>mega-ultra-</span><br>viltrapport</h1>
+    </div>
     <div class="auth-box">
-      <img src="icons/icon-192.png" alt="" class="auth-logo">
-      <h1>Viltrapport</h1>
 
       <form id="login-form">
         <label for="login-email">E-post</label>
@@ -41,7 +45,8 @@
   </section>
 
   <!-- ===== Välj nytt lösenord (efter inbjudan eller återställning) ===== -->
-  <section id="password-view" class="auth-view" hidden>
+  <section id="password-view" class="auth-view hero" hidden>
+    <div class="hero-scene hero-scene-small"></div>
     <div class="auth-box">
       <h1>Välj lösenord</h1>
       <form id="password-form">
@@ -56,9 +61,8 @@
   <!-- ===== Själva appen ===== -->
   <div id="app-view" hidden>
     <header class="topbar">
-      <span class="topbar-title">Viltrapport</span>
-      <span id="user-email" class="topbar-user"></span>
-      <button id="logout-btn" class="btn btn-small">Logga ut</button>
+      <span class="topbar-title">Charlies mega-ultra-viltrapport</span>
+      <button id="settings-btn" class="btn btn-small" aria-label="Inställningar">⚙️</button>
     </header>
 
     <div id="offline-banner" class="banner" hidden>Ingen uppkoppling – rapporter kan inte sparas just nu.</div>
@@ -125,6 +129,12 @@
           <ul id="species-suggestions" class="suggestions" role="listbox" hidden></ul>
         </div>
 
+        <div id="category-wrap" class="new-species" hidden>
+          <label for="category">Ny art! Vilken sorts djur är det?</label>
+          <select id="category"></select>
+          <p class="hint">Arten sparas i listan så att alla får den som förslag.</p>
+        </div>
+
         <label for="animal-count">Antal</label>
         <div class="stepper">
           <button type="button" class="btn btn-secondary" data-step="-1" aria-label="Minska">−</button>
@@ -145,6 +155,21 @@
           <button type="submit" id="save-btn" class="btn btn-primary">Spara</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Inställningar -->
+  <div id="settings-sheet" class="sheet" hidden>
+    <h2>Inställningar</h2>
+    <p class="hint">Inloggad som <strong id="user-email"></strong></p>
+
+    <label>Min färg på kartan</label>
+    <div id="color-picker" class="color-picker"></div>
+    <p id="settings-message" class="message" role="alert"></p>
+
+    <div class="sheet-buttons">
+      <button type="button" id="logout-btn" class="btn btn-danger">Logga ut</button>
+      <button type="button" id="settings-close" class="btn btn-primary">Klar</button>
     </div>
   </div>
 

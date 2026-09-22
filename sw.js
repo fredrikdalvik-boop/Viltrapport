@@ -1,6 +1,6 @@
 // Service worker – gör att appen kan installeras och startar snabbare.
 // Öka versionsnumret när du ändrar i listan nedan.
-const CACHE = 'viltrapport-v1';
+const CACHE = 'viltrapport-v2';
 
 const APP_FILES = [
   './',
@@ -12,9 +12,10 @@ const APP_FILES = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/scene.svg',
 ];
 
-const CDN_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net'];
+const CDN_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_FILES)));

@@ -1,6 +1,6 @@
 {
-  "name": "Viltrapport",
-  "short_name": "Viltrapport",
+  "name": "Charlies mega-ultra-viltrapport",
+  "short_name": "Charlies vilt",
   "description": "Rapportera vilt på flygplatsen",
   "lang": "sv",
   "start_url": "./",
