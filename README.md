@@ -28,6 +28,9 @@ Supabase → **Authentication** → **Users** → **Add user** → **Create new 
 - Enklast: skriv bara in arten i appen. Den sparas och blir ett förslag för alla.
 - Eller öppna `species.js` och lägg till en rad, t.ex. `['Myskoxe', 'daggdjur'],`.
 
+## Uppdatera områdesgränserna
+Exportera en ny GPX-fil (t.ex. från WeHunt), döp den till `omraden.gpx` och byt ut filen i mappen `data/`.
+
 ## Byta namn på appen
 Ändra `APP_NAME` i `config.js`. För hemskärmen: ändra även `name` och `short_name` i `manifest.json`.
 

@@ -17,4 +17,8 @@ window.CONFIG = {
   // Kartans startläge (flygplatsen)
   MAP_CENTER: [59.64695117088159, 17.938746172440855],
   MAP_ZOOM: 14,
+
+  // Områden som ritas ovanpå kartan (GPX-fil, t.ex. export från WeHunt).
+  // Byt ut filen i mappen data/ för att uppdatera gränserna. Tom sträng = inga områden.
+  AREAS_GPX: 'data/omraden.gpx',
 };

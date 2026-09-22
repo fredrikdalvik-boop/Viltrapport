@@ -407,6 +407,22 @@ main { flex: 1; position: relative; overflow: hidden; }
 .leaflet-control-layers label { font-weight: 400; margin: 6px 0; font-size: 17px; }
 .leaflet-control-zoom a { width: 44px !important; height: 44px !important; line-height: 44px !important; font-size: 22px !important; }
 
+/* Namn på områden (GPX) */
+.leaflet-tooltip.area-label {
+  background: rgba(255,255,255,0.85);
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
+  padding: 1px 6px;
+  color: #7a3d00;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.leaflet-tooltip.area-label::before { display: none; }
+.leaflet-tooltip.area-label-forbidden { color: #b3261e; }
+.hide-area-labels .area-label { display: none; }
+
 /* Nålar på kartan: användarens färg + djurikon */
 .pin-wrap { background: none; border: none; }
 .pin {

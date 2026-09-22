@@ -615,7 +615,8 @@ function initMap() {
     });
 
   streets.addTo(map);
-  L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true }).addTo(map);
+  const layersControl = L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true }).addTo(map);
+  loadAreas(layersControl);
 
   markerLayer = L.layerGroup().addTo(map);
 
@@ -629,6 +630,71 @@ function initMap() {
     placeDraftMarker(e.latlng);
     if ($('sheet').hidden) openSheet();
   });
+}
+
+// ---------- Områden (GPX) ----------
+// Ritar tomtgränser och områden från en GPX-fil. WeHunt anger typen i <type>:
+// border = yttergräns, subarea = delområde, forbidden = förbjudet område.
+
+const AREA_STYLES = {
+  border:    { color: '#ffd60a', weight: 4, opacity: 0.95, fillOpacity: 0 },
+  subarea:   { color: '#ff8c1a', weight: 2.5, opacity: 0.9, fillColor: '#ff8c1a', fillOpacity: 0.06 },
+  forbidden: { color: '#e53935', weight: 3, opacity: 0.95, dashArray: '8 6', fillColor: '#e53935', fillOpacity: 0.25 },
+};
+
+async function loadAreas(layersControl) {
+  if (!CONFIG.AREAS_GPX) return;
+  try {
+    const response = await fetch(CONFIG.AREAS_GPX, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const xml = new DOMParser().parseFromString(await response.text(), 'application/xml');
+
+    // Eget lager för namnen: ovanför ytorna men under rapportnålarna
+    map.createPane('areaLabels').style.zIndex = 450;
+
+    const areas = L.layerGroup();
+    const forbidden = L.layerGroup();
+    const tracks = [...xml.getElementsByTagName('trk'), ...xml.getElementsByTagName('rte')];
+
+    for (const track of tracks) {
+      const name = track.getElementsByTagName('name')[0]?.textContent.trim() ?? '';
+      const type = track.getElementsByTagName('type')[0]?.textContent.trim() ?? 'subarea';
+      const style = AREA_STYLES[type] ?? AREA_STYLES.subarea;
+      const points = [...track.getElementsByTagName('trkpt'), ...track.getElementsByTagName('rtept')]
+        .map((pt) => [Number(pt.getAttribute('lat')), Number(pt.getAttribute('lon'))])
+        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+      if (points.length < 2) continue;
+
+      // Slutet spår (första = sista punkten) blir en yta, annars en linje.
+      // interactive: false gör att man kan trycka "igenom" områdena för att rapportera.
+      const [first, last] = [points[0], points[points.length - 1]];
+      const closed = points.length > 3 && first[0] === last[0] && first[1] === last[1];
+      const shape = closed
+        ? L.polygon(points, { ...style, interactive: false })
+        : L.polyline(points, { ...style, interactive: false });
+
+      if (name && type !== 'border') {
+        const label = type === 'forbidden' ? `⛔ ${name.replace(/^Förbjudet område\s*-\s*/i, '')}` : name;
+        shape.bindTooltip(label, {
+          permanent: true, direction: 'center', interactive: false, pane: 'areaLabels',
+          className: `area-label ${type === 'forbidden' ? 'area-label-forbidden' : ''}`,
+        });
+      }
+      (type === 'forbidden' ? forbidden : areas).addLayer(shape);
+    }
+
+    areas.addTo(map);
+    forbidden.addTo(map);
+    layersControl.addOverlay(areas, '<span style="color:#ff8c1a">■</span> Områden');
+    layersControl.addOverlay(forbidden, '<span style="color:#e53935">■</span> Förbjudna områden');
+
+    // Namnen tar för mycket plats när man zoomar ut – visa dem bara när man är nära
+    const updateLabels = () => map.getContainer().classList.toggle('hide-area-labels', map.getZoom() < 13);
+    map.on('zoomend', updateLabels);
+    updateLabels();
+  } catch (err) {
+    console.warn('Kunde inte läsa områdena:', err.message);
+  }
 }
 
 function placeDraftMarker(latlng) {
