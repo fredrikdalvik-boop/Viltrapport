@@ -1,6 +1,6 @@
 // Service worker – gör att appen kan installeras och startar snabbare.
-// Öka versionsnumret när du ändrar i listan nedan.
-const CACHE = 'viltrapport-v2';
+// Öka versionsnumret vid varje ändring (samma nummer som ?v= i index.html).
+const CACHE = 'viltrapport-v3';
 
 const APP_FILES = [
   './',
@@ -35,10 +35,12 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
-  // Egna filer: hämta nytt först, använd sparad kopia om nätet saknas
+  // Egna filer: hämta nytt först, använd sparad kopia om nätet saknas.
+  // "no-cache" gör att webbläsaren alltid frågar GitHub om filen ändrats.
   if (url.origin === self.location.origin) {
+    const fresh = request.mode === 'navigate' ? request : new Request(request, { cache: 'no-cache' });
     event.respondWith(
-      fetch(request)
+      fetch(fresh)
         .then((response) => {
           const copy = response.clone();
           caches.open(CACHE).then((cache) => cache.put(request, copy));

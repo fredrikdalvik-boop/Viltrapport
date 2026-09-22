@@ -60,5 +60,5 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 
 ## Utveckling
 - Testa lokalt: `python3 -m http.server 8000` och öppna http://localhost:8000
-- Vid ändring av filer i `APP_FILES` i `sw.js`: öka `CACHE`-versionen.
+- Vid varje ändring: öka `?v=` på css/js i `index.html` och `CACHE` i `sw.js` (samma nummer). Annars kan gamla filer ligga kvar i webbläsaren.
 - Git-gren för arbete: `claude/wildlife-reporting-pwa-hawg43`.
