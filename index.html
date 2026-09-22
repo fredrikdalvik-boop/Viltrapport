@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -39,8 +39,42 @@
 
         <button type="submit" class="btn btn-primary">Logga in</button>
         <button type="button" id="forgot-btn" class="btn btn-link">Glömt lösenordet?</button>
+        <button type="button" id="show-signup" class="btn btn-secondary btn-wide">Skapa nytt konto</button>
       </form>
-      <p class="hint">Konto får du av en administratör.</p>
+
+      <form id="signup-form" hidden>
+        <h2>Skapa konto</h2>
+        <label for="signup-email">E-post</label>
+        <input id="signup-email" type="email" autocomplete="username" required>
+
+        <label for="signup-password">Välj lösenord (minst 8 tecken)</label>
+        <input id="signup-password" type="password" autocomplete="new-password" minlength="8" required>
+
+        <label for="signup-code">Inbjudningskod</label>
+        <input id="signup-code" type="text" autocomplete="off" autocapitalize="off" required>
+        <p class="hint">Koden får du av en admin.</p>
+
+        <p id="signup-message" class="message" role="alert"></p>
+
+        <button type="submit" class="btn btn-primary">Skapa konto</button>
+        <button type="button" id="show-login" class="btn btn-link">Har du redan ett konto? Logga in</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===== Ange inbjudningskod (konto utan giltig kod) ===== -->
+  <section id="code-view" class="auth-view hero" hidden>
+    <div class="hero-scene hero-scene-small"></div>
+    <div class="auth-box">
+      <h1>Inbjudningskod</h1>
+      <p class="hint">Ditt konto behöver en inbjudningskod innan du kan använda appen. Koden får du av en admin.</p>
+      <form id="code-form">
+        <label for="code-input">Kod</label>
+        <input id="code-input" type="text" autocomplete="off" autocapitalize="off" required>
+        <p id="code-message" class="message" role="alert"></p>
+        <button type="submit" class="btn btn-primary">Fortsätt</button>
+        <button type="button" id="code-logout" class="btn btn-link">Logga ut</button>
+      </form>
     </div>
   </section>
 
@@ -167,6 +201,24 @@
     <div id="color-picker" class="color-picker"></div>
     <p id="settings-message" class="message" role="alert"></p>
 
+    <!-- Bara för admin -->
+    <div id="admin-section" hidden>
+      <h2 class="admin-title">👑 Admin</h2>
+
+      <label for="admin-code">Inbjudningskod</label>
+      <p class="hint">Ge koden till den som ska skapa ett konto.</p>
+      <div class="inline-form">
+        <input id="admin-code" type="text" autocomplete="off" autocapitalize="off" minlength="6">
+        <button type="button" id="admin-code-save" class="btn btn-secondary">Byt kod</button>
+      </div>
+
+      <label>Användare</label>
+      <ul id="admin-users" class="admin-list"></ul>
+
+      <label>Arter som lagts till av användare</label>
+      <ul id="admin-species" class="admin-list"></ul>
+    </div>
+
     <div class="sheet-buttons">
       <button type="button" id="logout-btn" class="btn btn-danger">Logga ut</button>
       <button type="button" id="settings-close" class="btn btn-primary">Klar</button>
@@ -177,8 +229,8 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=3"></script>
-  <script src="species.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="config.js?v=4"></script>
+  <script src="species.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

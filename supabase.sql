@@ -1,10 +1,15 @@
 -- =============================================================
--- Viltrapport – databas och säkerhetsregler för Supabase
+-- Charlies mega-ultra-viltrapport – databas och säkerhetsregler
 -- Klistra in allt i Supabase → SQL Editor → New query → Run
 -- Går att köra flera gånger utan att något går sönder.
 -- =============================================================
 
--- 1. Tabellen för rapporter
+
+-- =============================================================
+-- 1. TABELLER
+-- =============================================================
+
+-- Rapporter
 create table if not exists public.reports (
   id             bigint generated always as identity primary key,
   user_id        uuid not null default auth.uid()
@@ -19,23 +24,92 @@ create table if not exists public.reports (
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now()
 );
-
 create index if not exists reports_observed_at_idx on public.reports (observed_at desc);
 
--- 2. Rapportören sätts alltid av databasen, aldrig av appen.
---    Det gör att ingen kan fuska och skriva in någon annans namn.
+-- Profiler: en rad per användare (färg, medlem, admin)
+create table if not exists public.profiles (
+  user_id    uuid primary key default auth.uid()
+             references auth.users (id) on delete cascade,
+  color      text check (color ~ '^#[0-9a-fA-F]{6}$'),
+  updated_at timestamptz not null default now()
+);
+alter table public.profiles alter column color drop not null;
+alter table public.profiles add column if not exists email text;
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+alter table public.profiles add column if not exists code_attempts integer not null default 0;
+
+-- "is_member" = har angett rätt inbjudningskod och får använda appen.
+-- Första gången kolumnen skapas blir alla befintliga användare medlemmar.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'is_member'
+  ) then
+    alter table public.profiles add column is_member boolean not null default false;
+    insert into public.profiles (user_id, email, is_member)
+      select id, email, true from auth.users
+      on conflict (user_id) do update set is_member = true, email = excluded.email;
+  end if;
+end $$;
+
+-- Arter som användarna lagt till själva
+create table if not exists public.custom_species (
+  id         bigint generated always as identity primary key,
+  name       text not null check (char_length(btrim(name)) between 1 and 100),
+  category   text not null default 'ovrigt' check (category ~ '^[a-z]{1,30}$'),
+  created_by uuid default auth.uid() references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists custom_species_name_key
+  on public.custom_species (lower(btrim(name)));
+
+-- Inställningar (t.ex. inbjudningskoden). Bara admins kan läsa.
+create table if not exists public.app_settings (
+  key   text primary key,
+  value text not null
+);
+-- Startkod (slumpad). Admin kan se och byta den i appen under ⚙️.
+insert into public.app_settings (key, value)
+  values ('signup_code', 'vilt-' || substr(md5(random()::text || clock_timestamp()::text), 1, 6))
+  on conflict (key) do nothing;
+
+
+-- =============================================================
+-- 2. HJÄLPFUNKTIONER
+-- =============================================================
+
+-- E-postadresser som automatiskt blir admin
+create or replace function public.is_auto_admin_email(address text)
+returns boolean language sql immutable set search_path = '' as $$
+  select lower(btrim(coalesce(address, ''))) in ('charlie.ledin@swedavia.se');
+$$;
+
+create or replace function public.is_member()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((select is_member from public.profiles where user_id = auth.uid()), false);
+$$;
+
+create or replace function public.is_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((select is_member and is_admin from public.profiles where user_id = auth.uid()), false);
+$$;
+
+
+-- =============================================================
+-- 3. AUTOMATIK (triggers)
+-- =============================================================
+
+-- Rapportören sätts alltid av databasen, aldrig av appen
 create or replace function public.reports_set_owner()
-returns trigger
-language plpgsql
-set search_path = ''
-as $$
+returns trigger language plpgsql set search_path = '' as $$
 begin
   if tg_op = 'INSERT' then
     new.user_id        := auth.uid();
     new.reporter_email := coalesce(auth.jwt() ->> 'email', 'okänd');
     new.created_at     := now();
   else
-    -- Vid ändring får ägare och skapad-tid inte ändras
+    -- Vid ändring (även av admin) får ägare och skapad-tid inte ändras
     new.user_id        := old.user_id;
     new.reporter_email := old.reporter_email;
     new.created_at     := old.created_at;
@@ -50,101 +124,189 @@ create trigger reports_set_owner
   before insert or update on public.reports
   for each row execute function public.reports_set_owner();
 
--- 3. Slå på Row Level Security (RLS)
-alter table public.reports enable row level security;
+-- Nytt konto: skapa profil. Rätt kod vid registreringen = medlem direkt.
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  code_ok boolean;
+begin
+  select exists (
+    select 1 from public.app_settings
+    where key = 'signup_code'
+      and lower(value) = lower(btrim(coalesce(new.raw_user_meta_data ->> 'signup_code', '')))
+  ) into code_ok;
 
--- 4. Säkerhetsregler (policies)
+  insert into public.profiles (user_id, email, is_member, is_admin)
+    values (new.id, new.email, code_ok, code_ok and public.is_auto_admin_email(new.email))
+    on conflict (user_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+
+-- =============================================================
+-- 4. FUNKTIONER SOM APPEN ANROPAR
+-- =============================================================
+
+-- Ange inbjudningskod i efterhand (max 10 felförsök)
+create or replace function public.redeem_signup_code(code text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  p public.profiles;
+begin
+  if auth.uid() is null then return 'wrong'; end if;
+
+  insert into public.profiles (user_id, email)
+    select id, email from auth.users where id = auth.uid()
+    on conflict (user_id) do nothing;
+
+  select * into p from public.profiles where user_id = auth.uid();
+  if p.is_member then return 'ok'; end if;
+  if p.code_attempts >= 10 then return 'locked'; end if;
+
+  if exists (
+    select 1 from public.app_settings
+    where key = 'signup_code' and lower(value) = lower(btrim(coalesce(code, '')))
+  ) then
+    update public.profiles
+      set is_member = true,
+          code_attempts = 0,
+          is_admin = is_admin or public.is_auto_admin_email(email)
+      where user_id = auth.uid();
+    return 'ok';
+  end if;
+
+  update public.profiles set code_attempts = code_attempts + 1 where user_id = auth.uid();
+  return 'wrong';
+end;
+$$;
+
+-- Admin: byt inbjudningskod
+create or replace function public.set_signup_code(new_code text)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.is_admin() then raise exception 'Bara admin får byta kod'; end if;
+  if char_length(btrim(coalesce(new_code, ''))) < 6 then
+    raise exception 'Koden måste vara minst 6 tecken';
+  end if;
+  update public.app_settings set value = btrim(new_code) where key = 'signup_code';
+end;
+$$;
+
+-- Admin: gör någon till admin eller ta bort admin
+create or replace function public.set_admin(target uuid, make_admin boolean)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.is_admin() then raise exception 'Bara admin får ändra admin'; end if;
+  if target = auth.uid() and not make_admin then
+    raise exception 'Du kan inte ta bort din egen admin';
+  end if;
+  update public.profiles set is_admin = make_admin where user_id = target and is_member;
+end;
+$$;
+
+
+-- =============================================================
+-- 5. SÄKERHETSREGLER (Row Level Security)
+-- =============================================================
+
+alter table public.reports        enable row level security;
+alter table public.profiles       enable row level security;
+alter table public.custom_species enable row level security;
+alter table public.app_settings   enable row level security;
+
+-- Rapporter: medlemmar ser allt och skapar egna. Ägaren eller admin ändrar/tar bort.
 drop policy if exists "Inloggade kan läsa alla rapporter" on public.reports;
-create policy "Inloggade kan läsa alla rapporter"
-  on public.reports for select
-  to authenticated
-  using (true);
+drop policy if exists "Medlemmar kan läsa alla rapporter" on public.reports;
+create policy "Medlemmar kan läsa alla rapporter"
+  on public.reports for select to authenticated
+  using ((select public.is_member()));
 
 drop policy if exists "Inloggade kan skapa egna rapporter" on public.reports;
-create policy "Inloggade kan skapa egna rapporter"
-  on public.reports for insert
-  to authenticated
-  with check (user_id = (select auth.uid()));
+drop policy if exists "Medlemmar kan skapa egna rapporter" on public.reports;
+create policy "Medlemmar kan skapa egna rapporter"
+  on public.reports for insert to authenticated
+  with check ((select public.is_member()) and user_id = (select auth.uid()));
 
 drop policy if exists "Man kan ändra sina egna rapporter" on public.reports;
-create policy "Man kan ändra sina egna rapporter"
-  on public.reports for update
-  to authenticated
-  using (user_id = (select auth.uid()))
-  with check (user_id = (select auth.uid()));
+drop policy if exists "Ägare eller admin kan ändra rapporter" on public.reports;
+create policy "Ägare eller admin kan ändra rapporter"
+  on public.reports for update to authenticated
+  using ((select public.is_admin()) or (user_id = (select auth.uid()) and (select public.is_member())))
+  with check ((select public.is_admin()) or (user_id = (select auth.uid()) and (select public.is_member())));
 
 drop policy if exists "Man kan ta bort sina egna rapporter" on public.reports;
-create policy "Man kan ta bort sina egna rapporter"
-  on public.reports for delete
-  to authenticated
-  using (user_id = (select auth.uid()));
+drop policy if exists "Ägare eller admin kan ta bort rapporter" on public.reports;
+create policy "Ägare eller admin kan ta bort rapporter"
+  on public.reports for delete to authenticated
+  using ((select public.is_admin()) or (user_id = (select auth.uid()) and (select public.is_member())));
 
--- 5. Den som inte är inloggad (anon) får ingen åtkomst alls
-revoke all on public.reports from anon;
-grant select, insert, update, delete on public.reports to authenticated;
-
--- =============================================================
--- DEL 2: Egna färger och egna arter
--- =============================================================
-
--- 6. Profiler – varje användares valda färg
-create table if not exists public.profiles (
-  user_id    uuid primary key default auth.uid()
-             references auth.users (id) on delete cascade,
-  color      text not null check (color ~ '^#[0-9a-fA-F]{6}$'),
-  updated_at timestamptz not null default now()
-);
-
-alter table public.profiles enable row level security;
-
+-- Profiler: medlemmar ser alla, alla ser sin egen. Man får bara ändra sin färg.
 drop policy if exists "Inloggade kan se allas färger" on public.profiles;
-create policy "Inloggade kan se allas färger"
-  on public.profiles for select
-  to authenticated
-  using (true);
+drop policy if exists "Medlemmar ser alla profiler" on public.profiles;
+create policy "Medlemmar ser alla profiler"
+  on public.profiles for select to authenticated
+  using ((select public.is_member()) or user_id = (select auth.uid()));
 
 drop policy if exists "Man kan skapa sin egen profil" on public.profiles;
-create policy "Man kan skapa sin egen profil"
-  on public.profiles for insert
-  to authenticated
-  with check (user_id = (select auth.uid()));
 
 drop policy if exists "Man kan ändra sin egen profil" on public.profiles;
 create policy "Man kan ändra sin egen profil"
-  on public.profiles for update
-  to authenticated
+  on public.profiles for update to authenticated
   using (user_id = (select auth.uid()))
   with check (user_id = (select auth.uid()));
 
-revoke all on public.profiles from anon;
-grant select, insert, update on public.profiles to authenticated;
-
--- 7. Egna arter – arter som användarna lagt till själva
-create table if not exists public.custom_species (
-  id         bigint generated always as identity primary key,
-  name       text not null check (char_length(btrim(name)) between 1 and 100),
-  category   text not null default 'ovrigt' check (category ~ '^[a-z]{1,30}$'),
-  created_by uuid default auth.uid() references auth.users (id) on delete set null,
-  created_at timestamptz not null default now()
-);
-
--- Samma art får bara finnas en gång (stora/små bokstäver räknas som samma)
-create unique index if not exists custom_species_name_key
-  on public.custom_species (lower(btrim(name)));
-
-alter table public.custom_species enable row level security;
-
+-- Egna arter: medlemmar ser och lägger till, admin tar bort
 drop policy if exists "Inloggade kan se egna arter" on public.custom_species;
-create policy "Inloggade kan se egna arter"
-  on public.custom_species for select
-  to authenticated
-  using (true);
+drop policy if exists "Medlemmar ser egna arter" on public.custom_species;
+create policy "Medlemmar ser egna arter"
+  on public.custom_species for select to authenticated
+  using ((select public.is_member()));
 
 drop policy if exists "Inloggade kan lägga till arter" on public.custom_species;
-create policy "Inloggade kan lägga till arter"
-  on public.custom_species for insert
-  to authenticated
-  with check (created_by = (select auth.uid()));
+drop policy if exists "Medlemmar kan lägga till arter" on public.custom_species;
+create policy "Medlemmar kan lägga till arter"
+  on public.custom_species for insert to authenticated
+  with check ((select public.is_member()) and created_by = (select auth.uid()));
 
-revoke all on public.custom_species from anon;
-grant select, insert on public.custom_species to authenticated;
+drop policy if exists "Admin kan ta bort arter" on public.custom_species;
+create policy "Admin kan ta bort arter"
+  on public.custom_species for delete to authenticated
+  using ((select public.is_admin()));
+
+-- Inställningar: bara admin kan läsa (ändringar sker via set_signup_code)
+drop policy if exists "Admin kan läsa inställningar" on public.app_settings;
+create policy "Admin kan läsa inställningar"
+  on public.app_settings for select to authenticated
+  using ((select public.is_admin()));
+
+
+-- =============================================================
+-- 6. RÄTTIGHETER
+-- =============================================================
+
+-- Den som inte är inloggad (anon) får ingen åtkomst alls
+revoke all on public.reports, public.profiles, public.custom_species, public.app_settings from anon;
+revoke all on public.reports, public.profiles, public.custom_species, public.app_settings from authenticated;
+
+grant select, insert, update, delete on public.reports to authenticated;
+grant select on public.profiles to authenticated;
+grant update (color, updated_at) on public.profiles to authenticated;  -- bara färgen, inte admin!
+grant select, insert, delete on public.custom_species to authenticated;
+grant select on public.app_settings to authenticated;
+
+revoke execute on function public.redeem_signup_code(text) from public, anon;
+revoke execute on function public.set_signup_code(text) from public, anon;
+revoke execute on function public.set_admin(uuid, boolean) from public, anon;
+revoke execute on function public.is_member() from public, anon;
+revoke execute on function public.is_admin() from public, anon;
+grant execute on function public.redeem_signup_code(text) to authenticated;
+grant execute on function public.set_signup_code(text) to authenticated;
+grant execute on function public.set_admin(uuid, boolean) to authenticated;
+grant execute on function public.is_member() to authenticated;
+grant execute on function public.is_admin() to authenticated;

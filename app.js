@@ -17,6 +17,8 @@ let draftMarker = null;   // nålen man placerar innan man sparar
 let editingId = null;     // id på rapporten som redigeras, annars null
 let userColors = new Map();   // user_id → vald färg
 let customSpecies = [];       // arter som användarna lagt till själva
+let profiles = [];            // alla användares profiler (e-post, admin …)
+let isAdmin = false;          // är den inloggade admin?
 
 // Färger man kan välja mellan
 const COLORS = [
@@ -68,6 +70,9 @@ function translateError(error) {
   if (/Failed to fetch|NetworkError|network/i.test(msg)) return 'Ingen kontakt med servern. Kontrollera uppkopplingen.';
   if (/Password should be at least/i.test(msg)) return 'Lösenordet är för kort.';
   if (/rate limit/i.test(msg)) return 'För många försök. Vänta en stund och försök igen.';
+  if (/already registered/i.test(msg)) return 'Det finns redan ett konto med den e-postadressen. Logga in i stället.';
+  if (/Signups not allowed/i.test(msg)) return 'Det går inte att skapa konton just nu. Kontakta en admin.';
+  if (/Bara admin|minst 6 tecken|egen admin/i.test(msg)) return msg;
   return 'Något gick fel: ' + msg;
 }
 
@@ -143,6 +148,11 @@ function updateCategoryVisibility() {
   $('category').required = isNew;
 }
 
+// Får den inloggade ändra/ta bort rapporten?
+function canEdit(report) {
+  return isAdmin || report.user_id === currentUser?.id;
+}
+
 // ---------- Färger ----------
 
 function defaultColor(userId) {
@@ -169,7 +179,7 @@ $('color-picker').addEventListener('click', async (e) => {
   const message = $('settings-message');
   message.textContent = '';
 
-  const { error } = await db.from('profiles').upsert({ user_id: currentUser.id, color });
+  const { error } = await db.from('profiles').update({ color }).eq('user_id', currentUser.id);
   if (error) {
     message.textContent = translateError(error);
     return;
@@ -184,11 +194,88 @@ $('color-picker').addEventListener('click', async (e) => {
 
 function openSettings() {
   closeSheet();
-  $('user-email').textContent = currentUser?.email ?? '';
+  $('user-email').textContent = (currentUser?.email ?? '') + (isAdmin ? ' (admin)' : '');
   $('settings-message').textContent = '';
   renderColorPicker();
+  $('admin-section').hidden = !isAdmin;
+  if (isAdmin) renderAdmin();
   $('settings-sheet').hidden = false;
 }
+
+// ---------- Admin ----------
+
+async function renderAdmin() {
+  // Inbjudningskoden
+  const { data, error } = await db.from('app_settings').select('value').eq('key', 'signup_code').maybeSingle();
+  $('admin-code').value = error ? '' : (data?.value ?? '');
+
+  // Användare
+  const members = profiles.filter((p) => p.is_member)
+    .sort((a, b) => (a.email ?? '').localeCompare(b.email ?? '', 'sv'));
+  $('admin-users').innerHTML = members.map((p) => `
+    <li>
+      <span><span style="color:${colorFor(p.user_id)}">●</span> ${escapeHtml(p.email ?? 'okänd')}
+        ${p.is_admin ? '<strong>👑 admin</strong>' : ''}</span>
+      ${p.user_id === currentUser.id ? '' : `
+        <button type="button" class="btn ${p.is_admin ? 'btn-danger' : 'btn-secondary'}"
+                data-admin-toggle="${p.user_id}" data-make="${!p.is_admin}">
+          ${p.is_admin ? 'Ta bort admin' : 'Gör till admin'}
+        </button>`}
+    </li>`).join('') || '<li><span class="hint">Inga användare</span></li>';
+
+  // Egna arter
+  $('admin-species').innerHTML = customSpecies.map((sp) => `
+    <li>
+      <span>${iconFor(sp.name)} ${escapeHtml(sp.name)}</span>
+      <button type="button" class="btn btn-danger" data-species-delete="${sp.id}">Ta bort</button>
+    </li>`).join('') || '<li><span class="hint">Inga egna arter ännu</span></li>';
+}
+
+$('admin-code-save').addEventListener('click', async () => {
+  const message = $('settings-message');
+  message.className = 'message';
+  const { error } = await db.rpc('set_signup_code', { new_code: $('admin-code').value });
+  if (error) {
+    message.textContent = translateError(error);
+    return;
+  }
+  showToast('Ny inbjudningskod sparad');
+  renderAdmin();
+});
+
+$('admin-users').addEventListener('click', async (e) => {
+  const button = e.target.closest('[data-admin-toggle]');
+  if (!button) return;
+  const makeAdmin = button.dataset.make === 'true';
+  const person = profiles.find((p) => p.user_id === button.dataset.adminToggle);
+  const question = makeAdmin
+    ? `Göra ${person?.email} till admin? Admin kan ändra och ta bort allas rapporter.`
+    : `Ta bort admin för ${person?.email}?`;
+  if (!confirm(question)) return;
+
+  const { error } = await db.rpc('set_admin', { target: button.dataset.adminToggle, make_admin: makeAdmin });
+  if (error) {
+    $('settings-message').textContent = translateError(error);
+    return;
+  }
+  await loadReports();
+  renderAdmin();
+});
+
+$('admin-species').addEventListener('click', async (e) => {
+  const button = e.target.closest('[data-species-delete]');
+  if (!button) return;
+  const sp = customSpecies.find((x) => String(x.id) === button.dataset.speciesDelete);
+  if (!confirm(`Ta bort arten "${sp?.name}" från förslagslistan? Rapporter med arten finns kvar.`)) return;
+
+  const { error } = await db.from('custom_species').delete().eq('id', button.dataset.speciesDelete);
+  if (error) {
+    $('settings-message').textContent = translateError(error);
+    return;
+  }
+  await loadReports();
+  renderAdmin();
+});
 
 function closeSettings() {
   $('settings-sheet').hidden = true;
@@ -202,6 +289,7 @@ $('settings-close').addEventListener('click', closeSettings);
 function showView(name) {
   $('login-view').hidden = name !== 'login';
   $('password-view').hidden = name !== 'password';
+  $('code-view').hidden = name !== 'code';
   $('app-view').hidden = name !== 'app';
 }
 
@@ -211,11 +299,12 @@ db.auth.onAuthStateChange((event, session) => {
   setTimeout(() => handleSession(session), 0);
 });
 
-function handleSession(session) {
+async function handleSession(session) {
   currentUser = session?.user ?? null;
 
   if (!currentUser) {
     reports = [];
+    isAdmin = false;
     showView('login');
     return;
   }
@@ -223,6 +312,24 @@ function handleSession(session) {
     showView('password');
     return;
   }
+
+  // Har kontot en giltig inbjudningskod? Annars får man skriva in den.
+  const { data: me, error } = await db.from('profiles')
+    .select('is_member, is_admin').eq('user_id', currentUser.id).maybeSingle();
+  if (error) {
+    // T.ex. om databasen inte är uppdaterad än – släpp in som vanlig användare
+    console.warn('Profil:', error.message);
+  } else if (!me?.is_member) {
+    // Försök med koden som angavs när kontot skapades
+    const code = currentUser.user_metadata?.signup_code;
+    const result = code ? (await db.rpc('redeem_signup_code', { code })).data : null;
+    if (result !== 'ok') {
+      showView('code');
+      return;
+    }
+    return handleSession(session);
+  }
+  isAdmin = Boolean(me?.is_admin);
 
   showView('app');
   initMap();
@@ -245,6 +352,68 @@ $('login-form').addEventListener('submit', async (e) => {
   button.disabled = false;
   if (error) message.textContent = translateError(error);
 });
+
+// Växla mellan "Logga in" och "Skapa konto"
+$('show-signup').addEventListener('click', () => {
+  $('login-form').hidden = true;
+  $('signup-form').hidden = false;
+  $('signup-email').value = $('login-email').value;
+  $('signup-email').focus();
+});
+$('show-login').addEventListener('click', () => {
+  $('signup-form').hidden = true;
+  $('login-form').hidden = false;
+});
+
+$('signup-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const button = e.submitter;
+  const message = $('signup-message');
+  message.className = 'message';
+  message.textContent = '';
+  button.disabled = true;
+
+  const { data, error } = await db.auth.signUp({
+    email: $('signup-email').value.trim(),
+    password: $('signup-password').value,
+    options: { data: { signup_code: $('signup-code').value.trim() } },
+  });
+
+  button.disabled = false;
+  if (error) {
+    message.textContent = translateError(error);
+  } else if (!data.session) {
+    // Supabase kräver att e-posten bekräftas först
+    message.className = 'message ok';
+    message.textContent = 'Kontot är skapat! Öppna mejlet vi skickat och klicka på länken, logga sedan in.';
+  }
+  // Annars loggas man in direkt (onAuthStateChange sköter resten)
+});
+
+$('code-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const button = e.submitter;
+  const message = $('code-message');
+  message.textContent = '';
+  button.disabled = true;
+
+  const { data, error } = await db.rpc('redeem_signup_code', { code: $('code-input').value.trim() });
+
+  button.disabled = false;
+  if (error) {
+    message.textContent = translateError(error);
+  } else if (data === 'locked') {
+    message.textContent = 'För många felaktiga försök. Kontakta en admin.';
+  } else if (data !== 'ok') {
+    message.textContent = 'Fel kod. Kontrollera och försök igen.';
+  } else {
+    showToast('Välkommen!');
+    const { data: { session } } = await db.auth.getSession();
+    handleSession(session);
+  }
+});
+
+$('code-logout').addEventListener('click', () => db.auth.signOut());
 
 $('forgot-btn').addEventListener('click', async () => {
   const email = $('login-email').value.trim();
@@ -359,7 +528,7 @@ function renderMarkers(list) {
 }
 
 function popupHtml(r) {
-  const own = r.user_id === currentUser?.id;
+  const own = canEdit(r);
   return `
     <div class="popup">
       <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
@@ -379,8 +548,8 @@ function popupHtml(r) {
 async function loadReports() {
   const [reportsResult, profilesResult, speciesResult] = await Promise.all([
     db.from('reports').select('*').order('observed_at', { ascending: false }).limit(5000),
-    db.from('profiles').select('user_id, color'),
-    db.from('custom_species').select('name, category').order('name'),
+    db.from('profiles').select('user_id, color, email, is_admin, is_member'),
+    db.from('custom_species').select('id, name, category').order('name'),
   ]);
 
   if (reportsResult.error) {
@@ -389,7 +558,10 @@ async function loadReports() {
   }
   // Färger och egna arter är "extra" – appen fungerar även om de inte går att hämta
   if (profilesResult.error) console.warn('Profiler:', profilesResult.error.message);
-  else userColors = new Map(profilesResult.data.map((p) => [p.user_id, p.color]));
+  else {
+    profiles = profilesResult.data;
+    userColors = new Map(profiles.filter((p) => p.color).map((p) => [p.user_id, p.color]));
+  }
   if (speciesResult.error) console.warn('Egna arter:', speciesResult.error.message);
   else customSpecies = speciesResult.data;
 
@@ -469,7 +641,7 @@ function renderList(list) {
         ${r.comment ? `<p class="comment">💬 ${escapeHtml(r.comment)}</p>` : ''}
         <div class="actions">
           <button class="btn btn-secondary" data-action="show" data-id="${r.id}">Visa på kartan</button>
-          ${own ? `
+          ${canEdit(r) ? `
             <button class="btn btn-secondary" data-action="edit" data-id="${r.id}">Redigera</button>
             <button class="btn btn-danger" data-action="delete" data-id="${r.id}">Ta bort</button>` : ''}
         </div>
