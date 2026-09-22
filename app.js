@@ -661,7 +661,9 @@ function initMap() {
       attribution: 'Bild &copy; Esri &mdash; Källa: Esri, Maxar, Earthstar Geographics och GIS User Community',
     });
 
-  streets.addTo(map);
+  // Kom ihåg karta/satellit till nästa gång
+  (layerPrefs.base === 'Satellit' ? satellite : streets).addTo(map);
+  map.on('baselayerchange', (e) => saveLayerPrefs({ base: e.name }));
   const layersControl = L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true }).addTo(map);
   loadAreas(layersControl);
 
@@ -689,6 +691,24 @@ const AREA_STYLES = {
   forbidden: { color: '#e53935', weight: 3, opacity: 0.95, dashArray: '8 6', fillColor: '#e53935', fillOpacity: 0.25 },
 };
 
+// Vilka lager man valt (sparas i webbläsaren)
+const LAYERS_KEY = 'viltrapport-layers';
+let layerPrefs = loadLayerPrefs();
+
+function loadLayerPrefs() {
+  const defaults = { base: 'Karta', border: true, subarea: true, forbidden: true, labels: true };
+  try {
+    return { ...defaults, ...JSON.parse(localStorage.getItem(LAYERS_KEY) || '{}') };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveLayerPrefs(changes) {
+  layerPrefs = { ...layerPrefs, ...changes };
+  try { localStorage.setItem(LAYERS_KEY, JSON.stringify(layerPrefs)); } catch { /* privat läge m.m. */ }
+}
+
 async function loadAreas(layersControl) {
   if (!CONFIG.AREAS_GPX) return;
   try {
@@ -699,8 +719,9 @@ async function loadAreas(layersControl) {
     // Eget lager för namnen: ovanför ytorna men under rapportnålarna
     map.createPane('areaLabels').style.zIndex = 450;
 
-    const areas = L.layerGroup();
-    const forbidden = L.layerGroup();
+    // Ett lager per typ, plus ett (tomt) lager som bara styr om namnen visas
+    const groups = { border: L.layerGroup(), subarea: L.layerGroup(), forbidden: L.layerGroup() };
+    const labels = L.layerGroup();
     const tracks = [...xml.getElementsByTagName('trk'), ...xml.getElementsByTagName('rte')];
 
     for (const track of tracks) {
@@ -727,16 +748,31 @@ async function loadAreas(layersControl) {
           className: `area-label ${type === 'forbidden' ? 'area-label-forbidden' : ''}`,
         });
       }
-      (type === 'forbidden' ? forbidden : areas).addLayer(shape);
+      (groups[type] ?? groups.subarea).addLayer(shape);
     }
 
-    areas.addTo(map);
-    forbidden.addTo(map);
-    layersControl.addOverlay(areas, '<span style="color:#ff8c1a">■</span> Områden');
-    layersControl.addOverlay(forbidden, '<span style="color:#e53935">■</span> Förbjudna områden');
+    const overlays = [
+      ['border', groups.border, '<span style="color:#e6b800">■</span> Yttergräns'],
+      ['subarea', groups.subarea, '<span style="color:#ff8c1a">■</span> Delområden'],
+      ['forbidden', groups.forbidden, '<span style="color:#e53935">■</span> Förbjudna områden'],
+      ['labels', labels, '🔤 Namn på områden'],
+    ];
+    for (const [key, layer, title] of overlays) {
+      if (layerPrefs[key]) layer.addTo(map);
+      layersControl.addOverlay(layer, title);
+    }
+    const keyOf = (layer) => overlays.find(([, l]) => l === layer)?.[0];
+    map.on('overlayadd overlayremove', (e) => {
+      const key = keyOf(e.layer);
+      if (key) saveLayerPrefs({ [key]: e.type === 'overlayadd' });
+      if (key === 'labels') updateLabels();
+    });
 
     // Namnen tar för mycket plats när man zoomar ut – visa dem bara när man är nära
-    const updateLabels = () => map.getContainer().classList.toggle('hide-area-labels', map.getZoom() < 13);
+    // Namnen döljs om man stängt av dem, eller när man zoomat ut långt (för plottrigt)
+    function updateLabels() {
+      map.getContainer().classList.toggle('hide-area-labels', !map.hasLayer(labels) || map.getZoom() < 13);
+    }
     map.on('zoomend', updateLabels);
     updateLabels();
   } catch (err) {

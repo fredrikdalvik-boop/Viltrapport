@@ -404,7 +404,20 @@ main { flex: 1; position: relative; overflow: hidden; }
 .map-hint { top: 12px; background: rgba(255,255,255,0.95); pointer-events: none; }
 
 .leaflet-control-layers-toggle { width: 48px !important; height: 48px !important; }
-.leaflet-control-layers label { font-weight: 400; margin: 6px 0; font-size: 17px; }
+.leaflet-control-layers label { font-weight: 400; margin: 0; font-size: 17px; }
+.leaflet-control-layers label > span,
+.leaflet-control-layers label > div { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.leaflet-control-layers input {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  flex: none;
+  accent-color: var(--green);
+}
+.leaflet-control-layers-expanded { padding: 8px 14px; }
+.leaflet-control-layers-separator { margin: 6px -14px; }
 .leaflet-control-zoom a { width: 44px !important; height: 44px !important; line-height: 44px !important; font-size: 22px !important; }
 
 /* Varningstriangel för olycka och birdstrike */

@@ -75,7 +75,9 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 ## Områden (GPX)
 - `data/omraden.gpx` (export från WeHunt, offentliga gränser) ritas ovanpå kartan av `loadAreas()`. Sökväg i `CONFIG.AREAS_GPX`.
 - `<type>` styr stilen (`AREA_STYLES`): `border` = gul yttergräns, `subarea` = orange delområde med namn,
-  `forbidden` = röd streckad yta, namn med ⛔. Två lager i lagerknappen: "Områden" och "Förbjudna områden".
+  `forbidden` = röd streckad yta, namn med ⛔. Lagerknappen har: Yttergräns, Delområden, Förbjudna områden,
+  Namn på områden (tomt lager som bara styr klassen `hide-area-labels`).
+- Valen i lagerknappen (även Karta/Satellit) sparas i `localStorage` (`viltrapport-layers`, `layerPrefs`).
 - Ytorna är `interactive: false` så att kartklick går igenom (man kan rapportera inne i ett område).
 - Namnen ligger i panen `areaLabels` (under nålarna) och döljs vid zoom < 13.
 - Uppdatera gränser: byt filen i `data/` och öka versionen i `sw.js`/`index.html`.
