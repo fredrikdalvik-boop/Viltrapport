@@ -805,24 +805,56 @@ function renderMarkers(list) {
       // Olycka/birdstrike: varningstriangel, liten prick i rapportörens färg
       ? L.divIcon({
         className: 'tri-wrap',
-        html: triangleHtml(type.emoji, colorFor(r.user_id)).replace('class="tri"', 'class="tri" style="--tri-size:44px"'),
-        iconSize: [44, 40],
-        iconAnchor: [22, 22],
-        popupAnchor: [0, -20],
+        html: triangleHtml(type.emoji, colorFor(r.user_id)).replace('class="tri"', 'class="tri" style="--tri-size:32px"'),
+        iconSize: [32, 29],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -18],
       })
       : L.divIcon({
         className: 'pin-wrap',
         html: `<div class="pin" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</div>`,
-        iconSize: [38, 38],
-        iconAnchor: [19, 19],
-        popupAnchor: [0, -18],
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16],
       });
     // Olyckor och birdstrikes ligger överst så att de inte göms under vanliga nålar
     const marker = L.marker([r.lat, r.lng], { icon, zIndexOffset: type.emoji ? 1000 : 0 });
     marker.bindPopup(() => popupHtml(r));
     marker.reportId = r.id;
+
+    // Dator (mus): liten informationsruta när man håller musen över ikonen.
+    // Mobil har ingen mus – där visas allt i rutan som öppnas när man trycker.
+    if (CAN_HOVER) {
+      marker.bindTooltip(() => tooltipHtml(r), { direction: 'top', offset: [0, -16], className: 'report-tip' });
+      // Den lilla rutan behövs inte när den stora är öppen
+      marker.on('popupopen', () => marker.closeTooltip());
+      marker.on('tooltipopen', () => { if (marker.isPopupOpen()) marker.closeTooltip(); });
+    }
+    // Ikonen hamnar överst och växer medan man håller över den eller har den öppen
+    const raise = () => marker.setZIndexOffset(2000);
+    const lower = () => { if (!marker.isPopupOpen()) marker.setZIndexOffset(type.emoji ? 1000 : 0); };
+    marker.on('mouseover', raise);
+    marker.on('mouseout', lower);
+    marker.on('popupopen', () => { raise(); marker.getElement()?.classList.add('marker-active'); });
+    marker.on('popupclose', () => { marker.getElement()?.classList.remove('marker-active'); lower(); });
     markerLayer.addLayer(marker);
   }
+}
+
+// Finns det en mus (dator)? På mobil är svaret nej.
+const CAN_HOVER = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+// Kort information när man håller musen över en ikon
+function tooltipHtml(r) {
+  return `
+    <div class="tip">
+      ${typeBadge(r)}
+      <strong>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</strong>
+      <span>🕒 ${formatDateTime(r.observed_at)}</span>
+      <span><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(r.reporter_email.split('@')[0])}</span>
+      ${r.comment ? `<span class="tip-comment">💬 ${escapeHtml(r.comment.length > 60 ? r.comment.slice(0, 60) + '…' : r.comment)}</span>` : ''}
+      <span class="tip-hint">Klicka för mer</span>
+    </div>`;
 }
 
 function popupHtml(r) {

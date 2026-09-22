@@ -62,7 +62,9 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - `supabase.sql` innehåller allt och är idempotent. Första körningen med `is_member` gör alla dåvarande användare till medlemmar.
 
 ## Ikoner och färger
-- Nålen = cirkel i rapportörens färg med djurgruppens emoji. Emoji som äldre telefoner saknar (🫎, 🪿, 🐦‍⬛) kontrolleras med canvas och byts mot `fallback`.
+- Nålen = cirkel (28px) i rapportörens färg med djurgruppens emoji. Triangeln för olycka/birdstrike är 32px.
+- Ikonen växer (`scale(1.45)`) vid hovring och när dess ruta är öppen (`.marker-active`). På dator (`CAN_HOVER`) visas en kort informationsruta (`tooltipHtml()`) vid hovring; klick öppnar den vanliga rutan. På mobil visas bara den vanliga rutan vid tryck.
+- Emoji som äldre telefoner saknar (🫎, 🪿, 🐦‍⬛) kontrolleras med canvas och byts mot `fallback`.
 - Skriver man en okänd art visas "Ny art!" med val av grupp. Arten sparas i `custom_species`.
 - Varje grupp i `SPECIES_GROUPS` har `kind`: `daggdjur`, `fagel` eller `annat`.
 
