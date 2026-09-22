@@ -264,6 +264,103 @@ input:focus, select:focus, textarea:focus {
 }
 .topbar .btn-small { font-size: 22px; min-width: 48px; }
 
+/* Filterrad under toppen (gäller både karta och lista) */
+.filter-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.filter-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 2px solid var(--green);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--green);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.filter-btn.active { background: var(--green); color: var(--white); }
+.filter-badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--orange);
+  color: var(--white);
+  font-size: 13px;
+  line-height: 22px;
+  text-align: center;
+}
+.filter-bar { flex-wrap: wrap; }
+.filter-chips {
+  order: 3;
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-chips:empty { display: none; }
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 4px 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--green-light);
+  color: var(--green);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chip .x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 16px;
+}
+.chip:hover .x { background: rgba(0,0,0,0.08); }
+.result-count { margin-left: auto; flex: none; color: var(--muted); font-size: 14px; white-space: nowrap; }
+
+/* Knappar bredvid varandra (snabbval för datum) */
+.segmented { display: flex; gap: 6px; }
+.segmented button {
+  flex: 1;
+  min-height: 46px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.segmented button.selected { border-color: var(--green); background: var(--green); color: var(--white); }
+#filter-sheet { max-height: 85vh; }
+#filter-sheet .filter-row label { font-size: 15px; }
+.suggestions .kind { font-weight: 700; }
+.suggestions .sub { color: var(--muted); font-size: 14px; margin-left: 4px; }
+
 .banner { background: #fff3cd; color: #6b4e00; padding: 8px 12px; font-size: 15px; text-align: center; }
 
 main { flex: 1; position: relative; overflow: hidden; }
@@ -292,7 +389,7 @@ main { flex: 1; position: relative; overflow: hidden; }
 /* ===== Karta ===== */
 #map { position: absolute; inset: 0; }
 
-.map-hint, .filter-chip {
+.map-hint {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -305,16 +402,6 @@ main { flex: 1; position: relative; overflow: hidden; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 .map-hint { top: 12px; background: rgba(255,255,255,0.95); pointer-events: none; }
-.filter-chip {
-  bottom: 16px;
-  border: none;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  background: var(--orange);
-  color: var(--white);
-  cursor: pointer;
-}
 
 .leaflet-control-layers-toggle { width: 48px !important; height: 48px !important; }
 .leaflet-control-layers label { font-weight: 400; margin: 6px 0; font-size: 17px; }

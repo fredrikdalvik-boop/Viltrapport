@@ -20,7 +20,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Bibliotek från CDN: Leaflet 1.9.4 (cdnjs), supabase-js v2 (jsdelivr, UMD → `window.supabase`).
 - Kartor: OpenStreetMap och Esri World Imagery (satellit), valbara via lagerknappen.
 - Supabase (gratisnivå) för databas och inloggning (e-post och lösenord).
-- Hosting: GitHub Pages. Alla sökvägar är relativa (`./`) eftersom sidan ligger under `/Viltrapport/`.
+- Hosting: **Cloudflare Pages** (projekt `viltrapport`, production branch `claude/wildlife-reporting-pwa-hawg43`, ingen build). GitHub Pages finns också kvar. Alla sökvägar är relativa (`./`) så båda fungerar.
 
 ## Filer
 | Fil | Innehåll |
@@ -63,12 +63,20 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 ## Ikoner och färger
 - Nålen = cirkel i rapportörens färg med djurgruppens emoji. Emoji som äldre telefoner saknar (🫎, 🪿, 🐦‍⬛) kontrolleras med canvas och byts mot `fallback`.
 - Skriver man en okänd art visas "Ny art!" med val av grupp. Arten sparas i `custom_species`.
+- Varje grupp i `SPECIES_GROUPS` har `kind`: `daggdjur`, `fagel` eller `annat`.
+
+## Filter
+- Ett gemensamt filter för karta och lista: filterraden (`.filter-bar`) under toppen, panelen `#filter-sheet`.
+- State i `filter` (app.js), sparas i `localStorage` (`viltrapport-filter`): `animal {type: kind|group|species, value, label, icon}`,
+  `reporter` (''/'me'/user_id), `quick` (''/'today'/'7'/'30'), `from`, `to`, `sort`. Ändra alltid via `setFilter()`.
+- Smarta djurfältet: `animalOptions(q)` ger "Alla däggdjur/fåglar" först, sedan grupper, sedan arter.
+- Aktiva filter visas som etiketter (`.chip`) med ✕.
 
 ## Inloggning
 - Konton skapas i appen med inbjudningskod. Admin kan också skapa användare i Supabase
   (Authentication → Users → Add user). De får då ange koden vid första inloggningen.
 - Inbjudnings- och återställningslänkar (`#...type=invite|recovery`) visar
-  vyn "Välj lösenord". Kräver att Site URL/Redirect URLs i Supabase pekar på GitHub Pages-adressen.
+  vyn "Välj lösenord". Kräver att Site URL/Redirect URLs i Supabase pekar på appens adress (Cloudflare Pages).
 
 ## Säkerhetsregler
 - Bara den publika nyckeln (`sb_publishable_...`/anon) får finnas i koden.

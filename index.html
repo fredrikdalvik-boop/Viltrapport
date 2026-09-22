@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -25,7 +25,7 @@
   <section id="auth-view" class="auth-view" hidden>
     <div class="auth-col">
       <div class="hero">
-        <img class="hero-img" src="icons/hero-scene.svg?v=5"
+        <img class="hero-img" src="icons/hero-scene.svg?v=6"
              alt="Två jägare med gevär på ryggen går med en labrador och en beagle i granskogen i solnedgången">
         <div class="hero-scrim"></div>
         <!-- Appens namn fylls i från CONFIG.APP_NAME i config.js -->
@@ -154,46 +154,22 @@
 
     <div id="offline-banner" class="banner" hidden>Ingen uppkoppling – rapporter kan inte sparas just nu.</div>
 
+    <!-- Filterrad: syns både på kartan och i listan -->
+    <div class="filter-bar">
+      <button type="button" id="filter-open" class="filter-btn">🔍 Filter<span id="filter-count" class="filter-badge" hidden></span></button>
+      <div id="filter-chips" class="filter-chips"></div>
+      <span id="result-count" class="result-count"></span>
+    </div>
+
     <main>
       <!-- Karta -->
       <section id="map-view" class="view">
         <div id="map"></div>
         <div class="map-hint" id="map-hint">Tryck på kartan där du såg djuret</div>
-        <button id="filter-chip" class="filter-chip" hidden></button>
       </section>
 
       <!-- Lista -->
       <section id="list-view" class="view" hidden>
-        <form id="filter-form" class="filters">
-          <div class="filter-row">
-            <label>Djurslag
-              <select id="filter-species"><option value="">Alla</option></select>
-            </label>
-            <label>Rapportör
-              <select id="filter-reporter"><option value="">Alla</option></select>
-            </label>
-          </div>
-          <div class="filter-row">
-            <label>Från datum
-              <input id="filter-from" type="date">
-            </label>
-            <label>Till datum
-              <input id="filter-to" type="date">
-            </label>
-          </div>
-          <div class="filter-row">
-            <label>Sortera
-              <select id="sort">
-                <option value="date-desc">Nyast först</option>
-                <option value="date-asc">Äldst först</option>
-                <option value="species">Djurslag A–Ö</option>
-                <option value="reporter">Rapportör A–Ö</option>
-              </select>
-            </label>
-            <button type="reset" class="btn btn-secondary">Rensa filter</button>
-          </div>
-        </form>
-        <p id="list-count" class="list-count"></p>
         <ul id="report-list" class="report-list"></ul>
       </section>
     </main>
@@ -245,6 +221,50 @@
     </div>
   </div>
 
+  <!-- Filter -->
+  <div id="filter-sheet" class="sheet" hidden>
+    <h2>Filter</h2>
+
+    <label for="filter-animal">Djur</label>
+    <div class="autocomplete">
+      <input id="filter-animal" type="text" autocomplete="off"
+             placeholder="Alla djur – skriv t.ex. fåglar, rovfåglar eller älg" aria-controls="filter-animal-suggestions">
+      <ul id="filter-animal-suggestions" class="suggestions" role="listbox" hidden></ul>
+    </div>
+
+    <label for="filter-reporter">Rapportör</label>
+    <select id="filter-reporter"></select>
+
+    <label>Datum</label>
+    <div class="segmented" id="filter-quick">
+      <button type="button" data-quick="">Alla</button>
+      <button type="button" data-quick="today">Idag</button>
+      <button type="button" data-quick="7">7 dagar</button>
+      <button type="button" data-quick="30">30 dagar</button>
+    </div>
+    <div class="filter-row">
+      <label>Från
+        <input id="filter-from" type="date">
+      </label>
+      <label>Till
+        <input id="filter-to" type="date">
+      </label>
+    </div>
+
+    <label for="sort">Sortera listan</label>
+    <select id="sort">
+      <option value="date-desc">Nyast först</option>
+      <option value="date-asc">Äldst först</option>
+      <option value="species">Djurslag A–Ö</option>
+      <option value="reporter">Rapportör A–Ö</option>
+    </select>
+
+    <div class="sheet-buttons">
+      <button type="button" id="filter-clear" class="btn btn-secondary">Rensa allt</button>
+      <button type="button" id="filter-done" class="btn btn-primary">Visa</button>
+    </div>
+  </div>
+
   <!-- Inställningar -->
   <div id="settings-sheet" class="sheet" hidden>
     <h2>Inställningar</h2>
@@ -282,8 +302,8 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=5"></script>
-  <script src="species.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="config.js?v=6"></script>
+  <script src="species.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

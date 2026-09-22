@@ -125,9 +125,10 @@ function emojiSupported(emoji) {
   return (emojiCache[emoji] = ok);
 }
 
-function iconFor(speciesName) {
-  const known = findKnownSpecies(speciesName);
-  const group = window.SPECIES_GROUPS[known?.group] ?? window.SPECIES_GROUPS.ovrigt;
+// Ikon för en art (eller direkt för en grupp om groupKey anges)
+function iconFor(speciesName, groupKey) {
+  const key = groupKey ?? findKnownSpecies(speciesName)?.group;
+  const group = window.SPECIES_GROUPS[key] ?? window.SPECIES_GROUPS.ovrigt;
   return group.fallback && !emojiSupported(group.icon) ? group.fallback : group.icon;
 }
 
@@ -194,6 +195,7 @@ $('color-picker').addEventListener('click', async (e) => {
 
 function openSettings() {
   closeSheet();
+  closeFilter();
   $('user-email').textContent = (currentUser?.email ?? '') + (isAdmin ? ' (admin)' : '');
   $('settings-message').textContent = '';
   renderColorPicker();
@@ -587,6 +589,7 @@ $('password-form').addEventListener('submit', async (e) => {
 
 $('logout-btn').addEventListener('click', async () => {
   closeSheet();
+  closeFilter();
   closeSettings();
   await db.auth.signOut();
 });
@@ -618,6 +621,11 @@ function initMap() {
 
   // Tryck på kartan = placera (eller flytta) nålen
   map.on('click', (e) => {
+    // Är filterpanelen öppen stänger första trycket bara den
+    if (!$('filter-sheet').hidden) {
+      closeFilter();
+      return;
+    }
     placeDraftMarker(e.latlng);
     if ($('sheet').hidden) openSheet();
   });
@@ -701,37 +709,75 @@ async function loadReports() {
   render();
 }
 
-// ---------- Filter och lista ----------
+// ---------- Filter ----------
+// Samma filter gäller både kartan och listan. Det sparas i webbläsaren
+// så att det finns kvar nästa gång man öppnar appen.
 
-function fillSelect(select, values) {
-  const current = select.value;
-  select.innerHTML = '<option value="">Alla</option>' +
-    values.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
-  select.value = values.includes(current) ? current : '';
+const FILTER_KEY = 'viltrapport-filter';
+const EMPTY_FILTER = {
+  animal: null,     // { type: 'kind' | 'group' | 'species', value, label, icon }
+  reporter: '',     // '' = alla, 'me' = bara mina, annars ett user_id
+  quick: '',        // '' | 'today' | '7' | '30'
+  from: '',
+  to: '',
+  sort: 'date-desc',
+};
+let filter = loadFilter();
+
+function loadFilter() {
+  try {
+    return { ...EMPTY_FILTER, ...JSON.parse(localStorage.getItem(FILTER_KEY) || '{}') };
+  } catch {
+    return { ...EMPTY_FILTER };
+  }
 }
 
-function updateFilterOptions() {
-  const sortSv = (a, b) => a.localeCompare(b, 'sv');
-  fillSelect($('filter-species'), [...new Set(reports.map((r) => r.species))].sort(sortSv));
-  fillSelect($('filter-reporter'), [...new Set(reports.map((r) => r.reporter_email))].sort(sortSv));
+function saveFilter() {
+  try { localStorage.setItem(FILTER_KEY, JSON.stringify(filter)); } catch { /* privat läge m.m. */ }
+}
+
+function setFilter(changes) {
+  filter = { ...filter, ...changes };
+  saveFilter();
+  syncFilterForm();
+  render();
+}
+
+// Djurgrupp och "däggdjur/fågel" för en art
+function groupOf(speciesName) {
+  return findKnownSpecies(speciesName)?.group ?? 'ovrigt';
+}
+function kindOf(speciesName) {
+  return window.SPECIES_GROUPS[groupOf(speciesName)]?.kind ?? 'annat';
+}
+
+// Datumintervallet som gäller just nu (snabbval räknas från dagens datum)
+function dateRange() {
+  if (filter.quick) {
+    const start = new Date();
+    if (filter.quick !== 'today') start.setDate(start.getDate() - (Number(filter.quick) - 1));
+    return { from: localDate(start), to: '' };
+  }
+  return { from: filter.from, to: filter.to };
+}
+
+function matchesFilter(r) {
+  const a = filter.animal;
+  if (a?.type === 'kind' && kindOf(r.species) !== a.value) return false;
+  if (a?.type === 'group' && groupOf(r.species) !== a.value) return false;
+  if (a?.type === 'species' && r.species.toLowerCase() !== a.value.toLowerCase()) return false;
+
+  if (filter.reporter === 'me' && r.user_id !== currentUser?.id) return false;
+  if (filter.reporter && filter.reporter !== 'me' && r.user_id !== filter.reporter) return false;
+
+  const { from, to } = dateRange();
+  const day = localDate(r.observed_at);
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
 }
 
 function getFilteredReports() {
-  const species = $('filter-species').value;
-  const reporter = $('filter-reporter').value;
-  const from = $('filter-from').value;
-  const to = $('filter-to').value;
-  const sort = $('sort').value;
-
-  const list = reports.filter((r) => {
-    if (species && r.species !== species) return false;
-    if (reporter && r.reporter_email !== reporter) return false;
-    const day = localDate(r.observed_at);
-    if (from && day < from) return false;
-    if (to && day > to) return false;
-    return true;
-  });
-
   const byDate = (a, b) => new Date(b.observed_at) - new Date(a.observed_at);
   const sorters = {
     'date-desc': byDate,
@@ -739,28 +785,231 @@ function getFilteredReports() {
     'species': (a, b) => a.species.localeCompare(b.species, 'sv') || byDate(a, b),
     'reporter': (a, b) => a.reporter_email.localeCompare(b.reporter_email, 'sv') || byDate(a, b),
   };
-  return list.sort(sorters[sort]);
+  return reports.filter(matchesFilter).sort(sorters[filter.sort] ?? byDate);
 }
 
-function isFilterActive() {
-  return ['filter-species', 'filter-reporter', 'filter-from', 'filter-to'].some((id) => $(id).value);
+// Vem som har rapporterat (för listan "Rapportör")
+function reporterOptions() {
+  const people = new Map();
+  for (const r of reports) people.set(r.user_id, r.reporter_email);
+  return [...people].filter(([id]) => id !== currentUser?.id)
+    .sort((a, b) => a[1].localeCompare(b[1], 'sv'));
 }
+
+function reporterLabel(id) {
+  if (id === 'me') return 'Bara mina';
+  return reports.find((r) => r.user_id === id)?.reporter_email
+    ?? profiles.find((p) => p.user_id === id)?.email ?? 'okänd';
+}
+
+function updateFilterOptions() {
+  const options = reporterOptions();
+  const select = $('filter-reporter');
+  select.innerHTML = '<option value="">Alla</option><option value="me">Bara mina</option>' +
+    options.map(([id, email]) => `<option value="${escapeHtml(id)}">${escapeHtml(email)}</option>`).join('');
+  // Finns den valda personen inte längre i listan: lägg till den ändå så att valet syns
+  if (filter.reporter && ![...select.options].some((o) => o.value === filter.reporter)) {
+    select.insertAdjacentHTML('beforeend',
+      `<option value="${escapeHtml(filter.reporter)}">${escapeHtml(reporterLabel(filter.reporter))}</option>`);
+  }
+  select.value = filter.reporter;
+}
+
+function dateLabel() {
+  const labels = { today: 'Idag', 7: '7 dagar', 30: '30 dagar' };
+  if (filter.quick) return labels[filter.quick];
+  if (filter.from && filter.to) return `${filter.from} – ${filter.to}`;
+  if (filter.from) return `från ${filter.from}`;
+  if (filter.to) return `till ${filter.to}`;
+  return '';
+}
+
+function renderFilterBar(shown) {
+  const chips = [];
+  if (filter.animal) chips.push(['animal', `${filter.animal.icon} ${filter.animal.label}`]);
+  if (filter.reporter) {
+    const dot = filter.reporter === 'me' ? '' : `<span style="color:${colorFor(filter.reporter)}">●</span> `;
+    chips.push(['reporter', `${dot}👤 ${escapeHtml(reporterLabel(filter.reporter).split('@')[0])}`, true]);
+  }
+  if (dateLabel()) chips.push(['date', `📅 ${dateLabel()}`]);
+
+  $('filter-chips').innerHTML = chips.map(([key, label, isHtml]) => `
+    <button type="button" class="chip" data-clear="${key}" aria-label="Ta bort filtret">
+      ${isHtml ? label : escapeHtml(label)}<span class="x" aria-hidden="true">✕</span>
+    </button>`).join('');
+
+  $('filter-count').hidden = chips.length === 0;
+  $('filter-count').textContent = chips.length;
+  $('filter-open').classList.toggle('active', chips.length > 0);
+  $('result-count').textContent = chips.length ? `${shown} av ${reports.length}` : `${reports.length} st`;
+  $('filter-done').textContent = `Visa ${shown} ${shown === 1 ? 'rapport' : 'rapporter'}`;
+}
+
+// Tryck på ✕ på en etikett = ta bort just det filtret
+$('filter-chips').addEventListener('click', (e) => {
+  const chip = e.target.closest('[data-clear]');
+  if (!chip) return;
+  if (chip.dataset.clear === 'animal') setFilter({ animal: null });
+  if (chip.dataset.clear === 'reporter') setFilter({ reporter: '' });
+  if (chip.dataset.clear === 'date') setFilter({ quick: '', from: '', to: '' });
+});
+
+// Fyll i filterpanelen från det sparade filtret
+function syncFilterForm() {
+  if (document.activeElement !== $('filter-animal')) $('filter-animal').value = filter.animal?.label ?? '';
+  $('filter-reporter').value = filter.reporter;
+  $('filter-from').value = filter.quick ? '' : filter.from;
+  $('filter-to').value = filter.quick ? '' : filter.to;
+  $('sort').value = filter.sort;
+  document.querySelectorAll('#filter-quick [data-quick]').forEach((b) => {
+    b.classList.toggle('selected', b.dataset.quick === filter.quick && (filter.quick || (!filter.from && !filter.to)));
+  });
+}
+
+function openFilter() {
+  closeSheet();
+  closeSettings();
+  updateFilterOptions();
+  syncFilterForm();
+  $('filter-sheet').hidden = false;
+}
+
+function closeFilter() {
+  $('filter-sheet').hidden = true;
+  hideAnimalSuggestions();
+}
+
+$('filter-open').addEventListener('click', () => ($('filter-sheet').hidden ? openFilter() : closeFilter()));
+$('filter-done').addEventListener('click', closeFilter);
+$('filter-clear').addEventListener('click', () => setFilter({ ...EMPTY_FILTER, sort: filter.sort }));
+
+$('filter-reporter').addEventListener('change', (e) => setFilter({ reporter: e.target.value }));
+$('sort').addEventListener('change', (e) => setFilter({ sort: e.target.value }));
+$('filter-from').addEventListener('change', (e) => setFilter({ from: e.target.value, quick: '' }));
+$('filter-to').addEventListener('change', (e) => setFilter({ to: e.target.value, quick: '' }));
+$('filter-quick').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-quick]');
+  if (b) setFilter({ quick: b.dataset.quick, from: '', to: '' });
+});
+
+// ---------- Filter: smart djurfält ----------
+// Ett fält för allt: "fåglar" → alla fåglar, "rov" → rovfåglar, "älg" → bara älg.
+
+const KIND_OPTIONS = [
+  { type: 'kind', value: 'daggdjur', label: 'Alla däggdjur', icon: '🐾', words: 'däggdjur djur' },
+  { type: 'kind', value: 'fagel', label: 'Alla fåglar', icon: '🐦', words: 'fåglar fågel' },
+];
+
+function animalOptions(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return KIND_OPTIONS;
+
+  const shortLabel = (label) => label.split(' (')[0];
+  const groups = Object.entries(window.SPECIES_GROUPS)
+    .filter(([key]) => key !== 'ovrigt')
+    .map(([key, g]) => ({
+      type: 'group', value: key, label: shortLabel(g.label), icon: iconFor(null, key),
+      words: g.label, sub: g.kind === 'fagel' ? 'fåglar' : 'däggdjur',
+    }));
+  // Alla kända arter + arter som finns i rapporterna men inte i listan
+  const names = new Map([...speciesIndex().values()].map((sp) => [sp.name.toLowerCase(), sp.name]));
+  for (const r of reports) if (!names.has(r.species.toLowerCase())) names.set(r.species.toLowerCase(), r.species);
+  const species = [...names.values()].map((name) => ({
+    type: 'species', value: name, label: name, icon: iconFor(name), words: name,
+  }));
+
+  const score = (o) => {
+    const label = o.label.toLowerCase();
+    const words = `${label} ${o.words.toLowerCase()}`.split(/[\s/(),-]+/);
+    // "Alla fåglar/däggdjur" först så fort ett ord börjar som man skrivit
+    if (o.type === 'kind') return words.some((w) => w.startsWith(q)) ? -1 : 99;
+    if (label.startsWith(q)) return 0;
+    if (words.some((w) => w.startsWith(q))) return 1;
+    if (o.words.toLowerCase().includes(q)) return 2;
+    return 99;
+  };
+  const typeOrder = { kind: 0, group: 1, species: 2 };
+  // En grupp med samma namn som en art (t.ex. "Älg") behövs inte två gånger
+  const speciesNames = new Set(species.map((o) => o.label.toLowerCase()));
+  const uniqueGroups = groups.filter((g) => !speciesNames.has(g.label.toLowerCase()));
+  return [...KIND_OPTIONS, ...uniqueGroups, ...species]
+    .map((o) => ({ ...o, score: score(o) }))
+    .filter((o) => o.score < 99)
+    .sort((a, b) => a.score - b.score || typeOrder[a.type] - typeOrder[b.type] || a.label.localeCompare(b.label, 'sv'))
+    .slice(0, 10);
+}
+
+let animalMatches = [];
+let activeAnimal = -1;
+
+function showAnimalSuggestions() {
+  animalMatches = animalOptions($('filter-animal').value);
+  activeAnimal = -1;
+  const box = $('filter-animal-suggestions');
+  const typeText = { kind: '', group: '<span class="sub">grupp</span>', species: '' };
+  box.innerHTML = [
+    '<li role="option" data-index="-1">🌍 Alla djur</li>',
+    ...animalMatches.map((o, i) => `
+      <li role="option" data-index="${i}" class="${o.type === 'kind' ? 'kind' : ''}">
+        ${o.icon} ${escapeHtml(o.label)} ${typeText[o.type]}
+      </li>`),
+  ].join('');
+  box.hidden = false;
+}
+
+function hideAnimalSuggestions() {
+  $('filter-animal-suggestions').hidden = true;
+}
+
+function chooseAnimal(index) {
+  const o = animalMatches[index];
+  hideAnimalSuggestions();
+  $('filter-animal').blur();
+  setFilter({ animal: o ? { type: o.type, value: o.value, label: o.label, icon: o.icon } : null });
+}
+
+$('filter-animal').addEventListener('focus', (e) => {
+  e.target.select();
+  showAnimalSuggestions();
+});
+$('filter-animal').addEventListener('input', showAnimalSuggestions);
+$('filter-animal').addEventListener('blur', () => setTimeout(() => {
+  hideAnimalSuggestions();
+  $('filter-animal').value = filter.animal?.label ?? '';
+}, 150));
+$('filter-animal-suggestions').addEventListener('mousedown', (e) => e.preventDefault());
+$('filter-animal-suggestions').addEventListener('click', (e) => {
+  const li = e.target.closest('li');
+  if (li) chooseAnimal(Number(li.dataset.index));
+});
+$('filter-animal').addEventListener('keydown', (e) => {
+  const items = [...$('filter-animal-suggestions').children];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    activeAnimal = (activeAnimal + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items.forEach((li, i) => li.classList.toggle('active', i === activeAnimal));
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    // Enter utan markering = första förslaget
+    const li = items[activeAnimal] ?? items[1] ?? items[0];
+    if (li) chooseAnimal(Number(li.dataset.index));
+  } else if (e.key === 'Escape') {
+    hideAnimalSuggestions();
+  }
+});
+
+// ---------- Visa karta och lista ----------
 
 function render() {
   const list = getFilteredReports();
   renderMarkers(list);
   renderList(list);
-
-  const chip = $('filter-chip');
-  chip.hidden = !isFilterActive();
-  chip.textContent = `Filter på: visar ${list.length} av ${reports.length} – ändra`;
+  renderFilterBar(list.length);
+  // Filterraden kan ändra höjd – då måste kartan räkna om sin storlek
+  map?.invalidateSize();
 }
 
 function renderList(list) {
-  $('list-count').textContent = isFilterActive()
-    ? `Visar ${list.length} av ${reports.length} rapporter`
-    : `${reports.length} rapporter`;
-
   $('report-list').innerHTML = list.map((r) => {
     const own = r.user_id === currentUser?.id;
     return `
@@ -777,13 +1026,8 @@ function renderList(list) {
             <button class="btn btn-danger" data-action="delete" data-id="${r.id}">Ta bort</button>` : ''}
         </div>
       </li>`;
-  }).join('') || '<li class="hint">Inga rapporter att visa.</li>';
+  }).join('') || `<li class="hint">${reports.length ? 'Inga rapporter matchar filtret.' : 'Inga rapporter än.'}</li>`;
 }
-
-$('filter-form').addEventListener('input', render);
-$('filter-form').addEventListener('change', render);
-$('filter-form').addEventListener('reset', () => setTimeout(render, 0));
-$('filter-chip').addEventListener('click', () => switchTab('list-view'));
 
 // ---------- Flikar ----------
 
@@ -836,6 +1080,7 @@ function openSheet(report = null) {
   hideSuggestions();
   updateCategoryVisibility();
   closeSettings();
+  closeFilter();
   $('sheet').hidden = false;
   $('map-hint').hidden = true;
 }

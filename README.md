@@ -9,7 +9,11 @@ sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
    - Varje nål har rapportörens färg och en ikon för djurslaget.
    - Välj din egen färg under ⚙️ (uppe till höger).
    - Knappen uppe till höger byter mellan karta och satellitbild.
-3. **Lista:** filtrera på djurslag, rapportör och datum. Filtret gäller även kartan.
+3. **Filter** (🔍 uppe, både på kartan och i listan):
+   - **Djur:** skriv t.ex. "fåglar", "däggdjur", "rovfåglar" eller "älg".
+   - **Rapportör:** alla, bara mina eller en viss person.
+   - **Datum:** Idag, 7 dagar, 30 dagar eller egna datum.
+   - Filtren går att kombinera. Tryck ✕ på en etikett för att ta bort ett filter. Appen kommer ihåg filtret.
 4. Dina egna rapporter kan du **redigera** eller **ta bort**.
 
 ## Installera på mobilen
