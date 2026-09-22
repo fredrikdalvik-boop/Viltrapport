@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Viltrapport</title>
+  <meta name="description" content="Rapportera vilt på flygplatsen">
+  <meta name="theme-color" content="#1f5130">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Viltrapport">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== Inloggning ===== -->
+  <section id="login-view" class="auth-view" hidden>
+    <div class="auth-box">
+      <img src="icons/icon-192.png" alt="" class="auth-logo">
+      <h1>Viltrapport</h1>
+
+      <form id="login-form">
+        <label for="login-email">E-post</label>
+        <input id="login-email" type="email" autocomplete="username" required>
+
+        <label for="login-password">Lösenord</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+
+        <p id="login-message" class="message" role="alert"></p>
+
+        <button type="submit" class="btn btn-primary">Logga in</button>
+        <button type="button" id="forgot-btn" class="btn btn-link">Glömt lösenordet?</button>
+      </form>
+      <p class="hint">Konto får du av en administratör.</p>
+    </div>
+  </section>
+
+  <!-- ===== Välj nytt lösenord (efter inbjudan eller återställning) ===== -->
+  <section id="password-view" class="auth-view" hidden>
+    <div class="auth-box">
+      <h1>Välj lösenord</h1>
+      <form id="password-form">
+        <label for="new-password">Nytt lösenord (minst 8 tecken)</label>
+        <input id="new-password" type="password" autocomplete="new-password" minlength="8" required>
+        <p id="password-message" class="message" role="alert"></p>
+        <button type="submit" class="btn btn-primary">Spara lösenord</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===== Själva appen ===== -->
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <span class="topbar-title">Viltrapport</span>
+      <span id="user-email" class="topbar-user"></span>
+      <button id="logout-btn" class="btn btn-small">Logga ut</button>
+    </header>
+
+    <div id="offline-banner" class="banner" hidden>Ingen uppkoppling – rapporter kan inte sparas just nu.</div>
+
+    <main>
+      <!-- Karta -->
+      <section id="map-view" class="view">
+        <div id="map"></div>
+        <div class="map-hint" id="map-hint">Tryck på kartan där du såg djuret</div>
+        <button id="filter-chip" class="filter-chip" hidden></button>
+      </section>
+
+      <!-- Lista -->
+      <section id="list-view" class="view" hidden>
+        <form id="filter-form" class="filters">
+          <div class="filter-row">
+            <label>Djurslag
+              <select id="filter-species"><option value="">Alla</option></select>
+            </label>
+            <label>Rapportör
+              <select id="filter-reporter"><option value="">Alla</option></select>
+            </label>
+          </div>
+          <div class="filter-row">
+            <label>Från datum
+              <input id="filter-from" type="date">
+            </label>
+            <label>Till datum
+              <input id="filter-to" type="date">
+            </label>
+          </div>
+          <div class="filter-row">
+            <label>Sortera
+              <select id="sort">
+                <option value="date-desc">Nyast först</option>
+                <option value="date-asc">Äldst först</option>
+                <option value="species">Djurslag A–Ö</option>
+                <option value="reporter">Rapportör A–Ö</option>
+              </select>
+            </label>
+            <button type="reset" class="btn btn-secondary">Rensa filter</button>
+          </div>
+        </form>
+        <p id="list-count" class="list-count"></p>
+        <ul id="report-list" class="report-list"></ul>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button class="tab active" data-view="map-view">🗺️ Karta</button>
+      <button class="tab" data-view="list-view">📋 Lista</button>
+    </nav>
+
+    <!-- Rapportformulär (glider upp nedifrån) -->
+    <div id="sheet" class="sheet" hidden>
+      <form id="report-form">
+        <h2 id="sheet-title">Ny rapport</h2>
+        <p class="hint">Du kan dra nålen eller trycka på kartan för att flytta den.</p>
+
+        <label for="species">Djurslag</label>
+        <div class="autocomplete">
+          <input id="species" type="text" autocomplete="off" required maxlength="100"
+                 placeholder="Börja skriva, t.ex. rå…" aria-autocomplete="list" aria-controls="species-suggestions">
+          <ul id="species-suggestions" class="suggestions" role="listbox" hidden></ul>
+        </div>
+
+        <label for="animal-count">Antal</label>
+        <div class="stepper">
+          <button type="button" class="btn btn-secondary" data-step="-1" aria-label="Minska">−</button>
+          <input id="animal-count" type="number" inputmode="numeric" min="1" max="10000" value="1" required>
+          <button type="button" class="btn btn-secondary" data-step="1" aria-label="Öka">+</button>
+        </div>
+
+        <label for="observed-at">Datum och tid</label>
+        <input id="observed-at" type="datetime-local" required>
+
+        <label for="comment">Kommentar (valfritt)</label>
+        <textarea id="comment" rows="2" maxlength="1000"></textarea>
+
+        <p id="form-message" class="message" role="alert"></p>
+
+        <div class="sheet-buttons">
+          <button type="button" id="cancel-btn" class="btn btn-secondary">Avbryt</button>
+          <button type="submit" id="save-btn" class="btn btn-primary">Spara</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="species.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
