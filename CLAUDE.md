@@ -1,6 +1,9 @@
-# Charlies mega-ultra-viltrapport – projektbeskrivning
+# Charlies mega-ultra-viltrapport-app – projektbeskrivning
 
-Appens namn är **"Charlies mega-ultra-viltrapport"** (repo: Viltrapport).
+Appens namn är **"Charlies mega-ultra-viltrapport-app"** (repo: Viltrapport). Namnet är på skoj och kan bytas:
+det finns på ETT ställe, `CONFIG.APP_NAME` i `config.js` (tre rader). JS fyller i alla element med
+`data-app-name="line1|line2|line3|full"` och `document.title`. Undantag som måste bytas för hand:
+`manifest.json` (`name`, `short_name`) och reservtexten i `index.html` (`<title>`, `apple-mobile-web-app-title`).
 
 PWA där personal på en flygplats (Arlanda, 59.6470, 17.9387) rapporterar
 var de sett vilt genom att markera platsen på en karta. Alla inloggade ser
@@ -27,7 +30,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `app.js` | All logik: auth, karta, CRUD, filter/sortering, artförslag |
 | `config.js` | Supabase-URL, publishable-nyckel, kartans centrum och zoom |
 | `species.js` | `SPECIES_GROUPS` (grupp → etikett + emoji-ikon, ev. `fallback`) och `SPECIES` (`[namn, grupp]`, ca 300 arter) |
-| `icons/scene.svg` | Startsidans bild: skog i solnedgång, två jägare med gevär på ryggen, en labrador och en beagle. Genererad med ett Python-skript (finns inte i repot), redigera SVG:n direkt |
+| `icons/hero-scene.svg` | Startsidans illustration från Claude Design (viewBox 480×440, `xMidYMax slice`). Används som den är. Himlens gradient ligger på `.hero` i CSS |
 | `sw.js` | Service worker. Egna filer: network-first. CDN: cache-first. Supabase och kartbilder cachas inte |
 | `manifest.json`, `icons/` | PWA-installation |
 | `supabase.sql` | Tabell, trigger och RLS-policies. Klistras in i Supabase SQL Editor |
@@ -37,6 +40,13 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Trigger `reports_set_owner` sätter `user_id` och `reporter_email` från den
   inloggades JWT vid insert och låser dem vid update. Appen skickar dem aldrig.
 - RLS är på. Medlemmar (`is_member()`): select alla, insert egna. Update/delete: ägaren eller admin (`is_admin()`). `anon`: ingen åtkomst.
+
+## Design (inloggning)
+- Inloggningsvyn följer designpaketet från Claude Design: bakgrund `#101218`, kolumn max 480px, hero 440px,
+  kort `#fbfaf7` som överlappar heron med 44px. Typsnitt: EB Garamond (rubriker), Source Sans 3 (UI).
+  Färger: primär `#c8603d`, länk `#1f5b3c`, fel `#b3261e`.
+- Allt inloggningsrelaterat ligger i `#auth-view` som paneler (`data-panel`): login, forgot, signup, code, password.
+  `showView()`/`showPanel()` i app.js växlar. Egen validering (`novalidate`) med fel under fälten.
 
 ## Övriga tabeller
 - `profiles (user_id, email, color, is_member, is_admin, code_attempts)`: skapas av triggern `handle_new_user` på `auth.users`. Användaren får bara uppdatera `color` (kolumnrättighet). `is_admin` ändras bara via `set_admin()`.

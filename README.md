@@ -1,4 +1,4 @@
-# Charlies mega-ultra-viltrapport
+# Charlies mega-ultra-viltrapport-app
 
 En app för att rapportera vilt på flygplatsen. Man trycker på kartan där djuret
 sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
@@ -23,6 +23,9 @@ Supabase → **Authentication** → **Users** → **Add user** → **Create new 
 ## Lägga till fler arter
 - Enklast: skriv bara in arten i appen. Den sparas och blir ett förslag för alla.
 - Eller öppna `species.js` och lägg till en rad, t.ex. `['Myskoxe', 'daggdjur'],`.
+
+## Byta namn på appen
+Ändra `APP_NAME` i `config.js`. För hemskärmen: ändra även `name` och `short_name` i `manifest.json`.
 
 ## Säkerhet
 Bara den publika nyckeln finns i `config.js`. Secret-/service_role-nyckeln får

@@ -20,7 +20,7 @@
 html, body {
   margin: 0;
   height: 100%;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 18px;
   color: var(--text);
   background: var(--bg);
@@ -74,59 +74,163 @@ input:focus, select:focus, textarea:focus {
 .message.ok { color: var(--green); }
 .hint { color: var(--muted); font-size: 15px; margin: 4px 0 8px; }
 
-/* ===== Inloggning ===== */
+/* ===== Inloggning (design från Claude Design) ===== */
 .auth-view {
   min-height: 100%;
   display: flex;
+  justify-content: center;
+  background: #101218;
+  font-family: "Source Sans 3", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.auth-col {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.hero {
+  position: relative;
+  height: 440px;
+  flex: none;
+  background: linear-gradient(180deg, #1b2040 0%, #4a3558 40%, #b8603f 78%, #e39a5a 100%);
+}
+.hero-img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(16,18,24,.55) 0%, rgba(16,18,24,0) 32%);
+}
+.hero-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(44px + env(safe-area-inset-top));
+  margin: 0;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  font-weight: 500;
+  text-shadow: 0 2px 14px rgba(0,0,0,.55);
+}
+.hero-title .t1 { font: 500 44px/1 "EB Garamond", Georgia, serif; color: #f6dfae; letter-spacing: .3px; }
+.hero-title .t2 { font: italic 500 25px/1.2 "EB Garamond", Georgia, serif; color: #f0a86e; }
+.hero-title .t3 { font: 500 40px/1 "EB Garamond", Georgia, serif; color: #fbf3e4; }
+
+.auth-card {
+  position: relative;
+  z-index: 2;
+  margin: -44px 16px 0;
+  background: #fbfaf7;
+  border-radius: 18px;
+  padding: 28px 22px 24px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.45);
+  color: #17181c;
+}
+.auth-spacer { flex: 1; min-height: 28px; }
+
+.auth-panel, #forgot-form { display: flex; flex-direction: column; gap: 18px; }
+.auth-panel[hidden] { display: none; }
+.field { display: flex; flex-direction: column; gap: 8px; }
+.auth-card label { margin: 0; font: 700 17px/1.2 "Source Sans 3", sans-serif; color: #17181c; }
+.auth-card input {
+  height: 52px;
+  min-height: 0;
+  padding: 0 14px;
+  font: 400 17px "Source Sans 3", sans-serif;
+  color: #17181c;
+  background: #fff;
+  border: 2px solid #cfccc4;
+  border-radius: 12px;
+  outline: none;
+}
+.auth-card input::placeholder { color: #9a9a93; }
+.auth-card input:focus { border-color: #c8603d; box-shadow: 0 0 0 3px rgba(200,96,61,.18); }
+.auth-card input.invalid { border-color: #b3261e; }
+.field-error { font: 400 14px/1.3 "Source Sans 3", sans-serif; color: #b3261e; }
+
+.pw-wrap { position: relative; display: flex; }
+.pw-wrap input { flex: 1; min-width: 0; padding-right: 64px; }
+.pw-toggle {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  height: 40px;
+  min-width: 52px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  font: 600 14px "Source Sans 3", sans-serif;
+  color: #5d5f66;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.pw-toggle:hover { background: #f0eee9; }
+
+.form-error { padding: 12px 14px; border-radius: 10px; background: #fbe9e6; font: 400 15px/1.35 "Source Sans 3", sans-serif; color: #8c1d16; }
+.form-ok { padding: 14px; border-radius: 10px; background: #e5efe8; font: 400 16px/1.4 "Source Sans 3", sans-serif; color: #163f2a; }
+
+.auth-primary {
+  margin-top: 6px;
+  height: 54px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
+  gap: 10px;
+  border: 0;
+  border-radius: 12px;
+  background: #c8603d;
+  color: #fff;
+  font: 700 18px "Source Sans 3", sans-serif;
+  cursor: pointer;
+  transition: background .15s;
 }
-.auth-box {
-  width: 100%;
-  max-width: 400px;
-  background: var(--white);
-  padding: 28px 22px;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-  text-align: left;
+.auth-primary:hover { background: #b3532f; }
+.auth-primary:active { background: #9e4828; }
+.auth-primary:disabled { cursor: wait; opacity: .85; }
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(255,255,255,.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
 }
-.auth-box h1 { text-align: center; color: var(--green); }
-.auth-logo { display: block; width: 72px; height: 72px; margin: 0 auto 8px; border-radius: 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* Startsidan med skog och jägare */
-.hero {
-  display: block;
-  padding: 0 0 32px;
-  background: #10121a;
+.auth-center { display: flex; justify-content: center; }
+.auth-link {
+  border: 0;
+  background: none;
+  padding: 10px 8px;
+  font: 700 17px "Source Sans 3", sans-serif;
+  color: #1f5b3c;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
-.hero-scene {
-  height: 58vh;
-  min-height: 340px;
-  background: #16213d url("icons/scene.svg") center bottom / cover no-repeat;
-  display: flex;
-  justify-content: center;
+.auth-link:hover { color: #163f2a; }
+.auth-help { margin: 0; font: 400 15px/1.45 "Source Sans 3", sans-serif; color: #5d5f66; text-align: center; }
+.auth-secondary {
+  height: 50px;
+  border: 2px solid #cfccc4;
+  border-radius: 12px;
+  background: transparent;
+  color: #17181c;
+  font: 700 17px "Source Sans 3", sans-serif;
+  cursor: pointer;
 }
-.hero-scene-small { height: 38vh; min-height: 240px; }
-.hero-title {
-  margin: 0;
-  padding: calc(26px + env(safe-area-inset-top)) 16px 0;
-  font-family: "Alfa Slab One", Georgia, serif;
-  font-weight: 400;
-  font-size: clamp(34px, 10vw, 60px);
-  line-height: 1.02;
-  text-align: center;
-  color: #ffe2a8;
-  text-shadow: 0 3px 16px rgba(0,0,0,0.55);
-}
-.hero-title span { color: #f7a35c; font-size: 0.72em; letter-spacing: 0.02em; }
-.hero .auth-box {
-  position: relative;
-  margin: -18px auto 0;
-  width: calc(100% - 32px);
-  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
-}
-.hero .btn-primary { background: #c8603f; }
+.auth-secondary:hover { background: #f0eee9; }
+.auth-heading { display: flex; flex-direction: column; gap: 6px; }
+.auth-heading h2 { margin: 0; font: 600 26px/1.15 "EB Garamond", Georgia, serif; color: #17181c; text-align: left; }
+.auth-heading p { margin: 0; font: 400 16px/1.45 "Source Sans 3", sans-serif; color: #5d5f66; }
 
 /* ===== Appens ramverk ===== */
 #app-view {
@@ -151,8 +255,9 @@ input:focus, select:focus, textarea:focus {
 .topbar-title {
   flex: 1;
   min-width: 0;
-  font-family: "Alfa Slab One", Georgia, serif;
-  font-size: 17px;
+  font-family: "EB Garamond", Georgia, serif;
+  font-weight: 600;
+  font-size: 20px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -315,8 +420,6 @@ main { flex: 1; position: relative; overflow: hidden; }
 }
 .admin-list li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .admin-list .btn { min-height: 40px; padding: 0 12px; font-size: 14px; }
-.btn-wide { width: 100%; margin-top: 18px; }
-.auth-box h2 { text-align: center; color: var(--green); }
 
 /* Ny art */
 .new-species {

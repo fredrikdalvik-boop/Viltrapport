@@ -3,99 +3,152 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Charlies mega-ultra-viltrapport</title>
+  <title>Charlies mega-ultra-viltrapport-app</title>
   <meta name="description" content="Rapportera vilt på flygplatsen">
-  <meta name="theme-color" content="#1f5130">
+  <meta name="theme-color" content="#101218">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Charlies vilt">
+  <meta name="apple-mobile-web-app-title" content="Charlies vilt-app">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
-  <!-- ===== Inloggning ===== -->
-  <section id="login-view" class="auth-view hero" hidden>
-    <div class="hero-scene" role="img" aria-label="Två jägare med gevär på ryggen går med en labrador och en beagle i skogen i solnedgången">
-      <h1 class="hero-title">Charlies<br><span>mega-ultra-</span><br>viltrapport</h1>
-    </div>
-    <div class="auth-box">
+  <!-- ===== Inloggning, konto och lösenord (design från Claude Design) ===== -->
+  <section id="auth-view" class="auth-view" hidden>
+    <div class="auth-col">
+      <div class="hero">
+        <img class="hero-img" src="icons/hero-scene.svg?v=5"
+             alt="Två jägare med gevär på ryggen går med en labrador och en beagle i granskogen i solnedgången">
+        <div class="hero-scrim"></div>
+        <!-- Appens namn fylls i från CONFIG.APP_NAME i config.js -->
+        <h1 class="hero-title">
+          <span class="t1" data-app-name="line1">Charlies</span>
+          <span class="t2" data-app-name="line2">mega-ultra-</span>
+          <span class="t3" data-app-name="line3">viltrapport-app</span>
+        </h1>
+      </div>
 
-      <form id="login-form">
-        <label for="login-email">E-post</label>
-        <input id="login-email" type="email" autocomplete="username" required>
+      <div class="auth-card">
 
-        <label for="login-password">Lösenord</label>
-        <input id="login-password" type="password" autocomplete="current-password" required>
+        <!-- Logga in -->
+        <form id="login-form" class="auth-panel" data-panel="login" novalidate>
+          <div class="field">
+            <label for="login-email">E-post</label>
+            <input id="login-email" type="email" autocomplete="email" placeholder="namn@exempel.se">
+          </div>
+          <div class="field">
+            <label for="login-password">Lösenord</label>
+            <div class="pw-wrap">
+              <input id="login-password" type="password" autocomplete="current-password">
+              <button type="button" class="pw-toggle">Visa</button>
+            </div>
+          </div>
+          <div id="login-message" class="form-error" role="alert" hidden></div>
+          <button type="submit" class="auth-primary"><span class="spinner" hidden></span><span class="label">Logga in</span></button>
+          <div class="auth-center">
+            <button type="button" id="forgot-btn" class="auth-link">Glömt lösenordet?</button>
+          </div>
+          <p class="auth-help">Ny här? Du behöver en inbjudningskod från en admin.</p>
+          <button type="button" id="show-signup" class="auth-secondary">Skapa nytt konto</button>
+        </form>
 
-        <p id="login-message" class="message" role="alert"></p>
+        <!-- Glömt lösenord -->
+        <div class="auth-panel" data-panel="forgot" hidden>
+          <div class="auth-heading">
+            <h2>Återställ lösenord</h2>
+            <p>Ange din e-post så skickar vi en länk för att välja ett nytt lösenord.</p>
+          </div>
+          <div id="forgot-done" class="form-ok" hidden></div>
+          <form id="forgot-form" novalidate>
+            <div class="field">
+              <label for="forgot-email">E-post</label>
+              <input id="forgot-email" type="email" autocomplete="email" placeholder="namn@exempel.se">
+            </div>
+            <div id="forgot-message" class="form-error" role="alert" hidden></div>
+            <button type="submit" class="auth-primary"><span class="spinner" hidden></span><span class="label">Skicka länk</span></button>
+          </form>
+          <div class="auth-center">
+            <button type="button" class="auth-link" data-goto="login">Tillbaka till inloggning</button>
+          </div>
+        </div>
 
-        <button type="submit" class="btn btn-primary">Logga in</button>
-        <button type="button" id="forgot-btn" class="btn btn-link">Glömt lösenordet?</button>
-        <button type="button" id="show-signup" class="btn btn-secondary btn-wide">Skapa nytt konto</button>
-      </form>
+        <!-- Skapa konto -->
+        <form id="signup-form" class="auth-panel" data-panel="signup" novalidate hidden>
+          <div class="auth-heading">
+            <h2>Skapa konto</h2>
+            <p>Koden får du av en admin.</p>
+          </div>
+          <div class="field">
+            <label for="signup-email">E-post</label>
+            <input id="signup-email" type="email" autocomplete="email" placeholder="namn@exempel.se">
+          </div>
+          <div class="field">
+            <label for="signup-password">Välj lösenord (minst 8 tecken)</label>
+            <div class="pw-wrap">
+              <input id="signup-password" type="password" autocomplete="new-password">
+              <button type="button" class="pw-toggle">Visa</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="signup-code">Inbjudningskod</label>
+            <input id="signup-code" type="text" autocomplete="off" autocapitalize="off">
+          </div>
+          <div id="signup-message" class="form-error" role="alert" hidden></div>
+          <button type="submit" class="auth-primary"><span class="spinner" hidden></span><span class="label">Skapa konto</span></button>
+          <div class="auth-center">
+            <button type="button" class="auth-link" data-goto="login">Har du redan ett konto? Logga in</button>
+          </div>
+        </form>
 
-      <form id="signup-form" hidden>
-        <h2>Skapa konto</h2>
-        <label for="signup-email">E-post</label>
-        <input id="signup-email" type="email" autocomplete="username" required>
+        <!-- Ange inbjudningskod (konto utan giltig kod) -->
+        <form id="code-form" class="auth-panel" data-panel="code" novalidate hidden>
+          <div class="auth-heading">
+            <h2>Inbjudningskod</h2>
+            <p>Ditt konto behöver en inbjudningskod innan du kan använda appen. Koden får du av en admin.</p>
+          </div>
+          <div class="field">
+            <label for="code-input">Kod</label>
+            <input id="code-input" type="text" autocomplete="off" autocapitalize="off">
+          </div>
+          <div id="code-message" class="form-error" role="alert" hidden></div>
+          <button type="submit" class="auth-primary"><span class="spinner" hidden></span><span class="label">Fortsätt</span></button>
+          <div class="auth-center">
+            <button type="button" id="code-logout" class="auth-link">Logga ut</button>
+          </div>
+        </form>
 
-        <label for="signup-password">Välj lösenord (minst 8 tecken)</label>
-        <input id="signup-password" type="password" autocomplete="new-password" minlength="8" required>
-
-        <label for="signup-code">Inbjudningskod</label>
-        <input id="signup-code" type="text" autocomplete="off" autocapitalize="off" required>
-        <p class="hint">Koden får du av en admin.</p>
-
-        <p id="signup-message" class="message" role="alert"></p>
-
-        <button type="submit" class="btn btn-primary">Skapa konto</button>
-        <button type="button" id="show-login" class="btn btn-link">Har du redan ett konto? Logga in</button>
-      </form>
-    </div>
-  </section>
-
-  <!-- ===== Ange inbjudningskod (konto utan giltig kod) ===== -->
-  <section id="code-view" class="auth-view hero" hidden>
-    <div class="hero-scene hero-scene-small"></div>
-    <div class="auth-box">
-      <h1>Inbjudningskod</h1>
-      <p class="hint">Ditt konto behöver en inbjudningskod innan du kan använda appen. Koden får du av en admin.</p>
-      <form id="code-form">
-        <label for="code-input">Kod</label>
-        <input id="code-input" type="text" autocomplete="off" autocapitalize="off" required>
-        <p id="code-message" class="message" role="alert"></p>
-        <button type="submit" class="btn btn-primary">Fortsätt</button>
-        <button type="button" id="code-logout" class="btn btn-link">Logga ut</button>
-      </form>
-    </div>
-  </section>
-
-  <!-- ===== Välj nytt lösenord (efter inbjudan eller återställning) ===== -->
-  <section id="password-view" class="auth-view hero" hidden>
-    <div class="hero-scene hero-scene-small"></div>
-    <div class="auth-box">
-      <h1>Välj lösenord</h1>
-      <form id="password-form">
-        <label for="new-password">Nytt lösenord (minst 8 tecken)</label>
-        <input id="new-password" type="password" autocomplete="new-password" minlength="8" required>
-        <p id="password-message" class="message" role="alert"></p>
-        <button type="submit" class="btn btn-primary">Spara lösenord</button>
-      </form>
+        <!-- Välj nytt lösenord (efter inbjudan eller återställning) -->
+        <form id="password-form" class="auth-panel" data-panel="password" novalidate hidden>
+          <div class="auth-heading">
+            <h2>Välj lösenord</h2>
+          </div>
+          <div class="field">
+            <label for="new-password">Nytt lösenord (minst 8 tecken)</label>
+            <div class="pw-wrap">
+              <input id="new-password" type="password" autocomplete="new-password">
+              <button type="button" class="pw-toggle">Visa</button>
+            </div>
+          </div>
+          <div id="password-message" class="form-error" role="alert" hidden></div>
+          <button type="submit" class="auth-primary"><span class="spinner" hidden></span><span class="label">Spara lösenord</span></button>
+        </form>
+      </div>
+      <div class="auth-spacer"></div>
     </div>
   </section>
 
   <!-- ===== Själva appen ===== -->
   <div id="app-view" hidden>
     <header class="topbar">
-      <span class="topbar-title">Charlies mega-ultra-viltrapport</span>
+      <span class="topbar-title" data-app-name="full">Charlies mega-ultra-viltrapport-app</span>
       <button id="settings-btn" class="btn btn-small" aria-label="Inställningar">⚙️</button>
     </header>
 
@@ -229,8 +282,8 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=4"></script>
-  <script src="species.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="config.js?v=5"></script>
+  <script src="species.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

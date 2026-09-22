@@ -284,14 +284,113 @@ function closeSettings() {
 $('settings-btn').addEventListener('click', openSettings);
 $('settings-close').addEventListener('click', closeSettings);
 
-// ---------- Inloggning ----------
+// ---------- Appens namn ----------
+
+// Fyller i namnet från CONFIG.APP_NAME överallt där det står data-app-name="…"
+function applyAppName() {
+  const n = CONFIG.APP_NAME;
+  const full = `${n.line1} ${n.line2}${n.line3}`;
+  document.title = full;
+  document.querySelectorAll('[data-app-name]').forEach((el) => {
+    el.textContent = el.dataset.appName === 'full' ? full : n[el.dataset.appName];
+  });
+}
+applyAppName();
+
+// ---------- Vyer ----------
 
 function showView(name) {
-  $('login-view').hidden = name !== 'login';
-  $('password-view').hidden = name !== 'password';
-  $('code-view').hidden = name !== 'code';
-  $('app-view').hidden = name !== 'app';
+  const isApp = name === 'app';
+  $('app-view').hidden = !isApp;
+  $('auth-view').hidden = isApp;
+  if (!isApp) showPanel(name);
 }
+
+// Vilken ruta som visas i inloggningskortet: login, forgot, signup, code, password
+function showPanel(name) {
+  document.querySelectorAll('.auth-panel').forEach((panel) => {
+    panel.hidden = panel.dataset.panel !== name;
+  });
+  clearErrors();
+}
+
+document.querySelectorAll('[data-goto]').forEach((btn) => {
+  btn.addEventListener('click', () => showPanel(btn.dataset.goto));
+});
+
+// ---------- Hjälp för formulären ----------
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function setFieldError(input, text) {
+  input.classList.add('invalid');
+  const field = input.closest('.field');
+  let el = field.querySelector('.field-error');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'field-error';
+    field.appendChild(el);
+  }
+  el.textContent = text;
+}
+
+function setFormError(id, text) {
+  const el = $(id);
+  el.className = 'form-error';
+  el.textContent = text;
+  el.hidden = !text;
+}
+
+function clearErrors() {
+  document.querySelectorAll('.auth-card .invalid').forEach((el) => el.classList.remove('invalid'));
+  document.querySelectorAll('.auth-card .field-error').forEach((el) => el.remove());
+  document.querySelectorAll('.auth-card .form-error').forEach((el) => { el.hidden = true; });
+}
+
+// Felet för ett fält försvinner när man börjar skriva i det
+document.querySelectorAll('.auth-card input').forEach((input) => {
+  input.addEventListener('input', () => {
+    input.classList.remove('invalid');
+    input.closest('.field')?.querySelector('.field-error')?.remove();
+    const formError = input.closest('form')?.querySelector('.form-error');
+    if (formError) formError.hidden = true;
+  });
+});
+
+function validateEmail(input) {
+  const value = input.value.trim();
+  if (!value) { setFieldError(input, 'Fyll i din e-post.'); return false; }
+  if (!EMAIL_RE.test(value)) { setFieldError(input, 'Kontrollera e-postadressen.'); return false; }
+  return true;
+}
+
+function validatePassword(input, minLength = 1) {
+  if (!input.value) { setFieldError(input, 'Fyll i ditt lösenord.'); return false; }
+  if (input.value.length < minLength) { setFieldError(input, `Lösenordet måste vara minst ${minLength} tecken.`); return false; }
+  return true;
+}
+
+// Knapp med snurra medan något laddar
+function setLoading(form, loading, loadingText) {
+  const button = form.querySelector('.auth-primary');
+  const label = button.querySelector('.label');
+  if (loading) button.dataset.label = label.textContent;
+  button.disabled = loading;
+  button.querySelector('.spinner').hidden = !loading;
+  label.textContent = loading ? loadingText : button.dataset.label;
+}
+
+// Visa/Dölj lösenord
+document.querySelectorAll('.pw-toggle').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const input = btn.parentElement.querySelector('input');
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.textContent = show ? 'Dölj' : 'Visa';
+  });
+});
+
+// ---------- Inloggning ----------
 
 db.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') needsNewPassword = true;
@@ -305,7 +404,8 @@ async function handleSession(session) {
   if (!currentUser) {
     reports = [];
     isAdmin = false;
-    showView('login');
+    // Byt inte bort t.ex. "Skapa konto" om man redan står där
+    if ($('auth-view').hidden || ['code', 'password'].includes(currentPanel())) showView('login');
     return;
   }
   if (needsNewPassword) {
@@ -336,76 +436,123 @@ async function handleSession(session) {
   loadReports();
 }
 
+function currentPanel() {
+  return document.querySelector('.auth-panel:not([hidden])')?.dataset.panel;
+}
+
 $('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const button = e.submitter;
-  const message = $('login-message');
-  message.className = 'message';
-  message.textContent = '';
-  button.disabled = true;
+  const form = e.currentTarget;
+  clearErrors();
+  const okEmail = validateEmail($('login-email'));
+  const okPw = validatePassword($('login-password'));
+  if (!okEmail || !okPw) return;
 
+  setLoading(form, true, 'Loggar in…');
   const { error } = await db.auth.signInWithPassword({
     email: $('login-email').value.trim(),
     password: $('login-password').value,
   });
+  setLoading(form, false);
 
-  button.disabled = false;
-  if (error) message.textContent = translateError(error);
+  if (error) {
+    setFormError('login-message', /Invalid login credentials/i.test(error.message)
+      ? 'Fel e-post eller lösenord. Försök igen.'
+      : translateError(error));
+  }
 });
 
-// Växla mellan "Logga in" och "Skapa konto"
+// ---------- Glömt lösenord ----------
+
+$('forgot-btn').addEventListener('click', () => {
+  showPanel('forgot');
+  $('forgot-email').value = $('login-email').value;
+  $('forgot-form').hidden = false;
+  $('forgot-done').hidden = true;
+});
+
+$('forgot-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  clearErrors();
+  if (!validateEmail($('forgot-email'))) return;
+
+  const email = $('forgot-email').value.trim();
+  setLoading(form, true, 'Skickar…');
+  const { error } = await db.auth.resetPasswordForEmail(email, {
+    redirectTo: location.origin + location.pathname,
+  });
+  setLoading(form, false);
+
+  if (error && !/rate limit/i.test(error.message)) {
+    setFormError('forgot-message', translateError(error));
+    return;
+  }
+  // Samma besked oavsett om kontot finns (avslöjar inte vilka konton som finns)
+  form.hidden = true;
+  $('forgot-done').textContent = `Om adressen finns hos oss har en länk skickats till ${email}.`;
+  $('forgot-done').hidden = false;
+  $('login-email').value = email;
+});
+
+// ---------- Skapa konto ----------
+
 $('show-signup').addEventListener('click', () => {
-  $('login-form').hidden = true;
-  $('signup-form').hidden = false;
+  showPanel('signup');
   $('signup-email').value = $('login-email').value;
   $('signup-email').focus();
-});
-$('show-login').addEventListener('click', () => {
-  $('signup-form').hidden = true;
-  $('login-form').hidden = false;
 });
 
 $('signup-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const button = e.submitter;
-  const message = $('signup-message');
-  message.className = 'message';
-  message.textContent = '';
-  button.disabled = true;
+  const form = e.currentTarget;
+  clearErrors();
+  const okEmail = validateEmail($('signup-email'));
+  const okPw = validatePassword($('signup-password'), 8);
+  const okCode = Boolean($('signup-code').value.trim());
+  if (!okCode) setFieldError($('signup-code'), 'Fyll i inbjudningskoden.');
+  if (!okEmail || !okPw || !okCode) return;
 
+  setLoading(form, true, 'Skapar konto…');
   const { data, error } = await db.auth.signUp({
     email: $('signup-email').value.trim(),
     password: $('signup-password').value,
     options: { data: { signup_code: $('signup-code').value.trim() } },
   });
+  setLoading(form, false);
 
-  button.disabled = false;
   if (error) {
-    message.textContent = translateError(error);
+    setFormError('signup-message', translateError(error));
   } else if (!data.session) {
     // Supabase kräver att e-posten bekräftas först
-    message.className = 'message ok';
-    message.textContent = 'Kontot är skapat! Öppna mejlet vi skickat och klicka på länken, logga sedan in.';
+    setFormError('signup-message', 'Kontot är skapat! Öppna mejlet vi skickat och klicka på länken, logga sedan in.');
+    $('signup-message').className = 'form-ok';
   }
   // Annars loggas man in direkt (onAuthStateChange sköter resten)
 });
 
+// ---------- Inbjudningskod i efterhand ----------
+
 $('code-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const button = e.submitter;
-  const message = $('code-message');
-  message.textContent = '';
-  button.disabled = true;
+  const form = e.currentTarget;
+  clearErrors();
+  const code = $('code-input').value.trim();
+  if (!code) {
+    setFieldError($('code-input'), 'Fyll i koden.');
+    return;
+  }
 
-  const { data, error } = await db.rpc('redeem_signup_code', { code: $('code-input').value.trim() });
+  setLoading(form, true, 'Kontrollerar…');
+  const { data, error } = await db.rpc('redeem_signup_code', { code });
+  setLoading(form, false);
 
-  button.disabled = false;
   if (error) {
-    message.textContent = translateError(error);
+    setFormError('code-message', translateError(error));
   } else if (data === 'locked') {
-    message.textContent = 'För många felaktiga försök. Kontakta en admin.';
+    setFormError('code-message', 'För många felaktiga försök. Kontakta en admin.');
   } else if (data !== 'ok') {
-    message.textContent = 'Fel kod. Kontrollera och försök igen.';
+    setFormError('code-message', 'Fel kod. Kontrollera och försök igen.');
   } else {
     showToast('Välkommen!');
     const { data: { session } } = await db.auth.getSession();
@@ -415,36 +562,20 @@ $('code-form').addEventListener('submit', async (e) => {
 
 $('code-logout').addEventListener('click', () => db.auth.signOut());
 
-$('forgot-btn').addEventListener('click', async () => {
-  const email = $('login-email').value.trim();
-  const message = $('login-message');
-  message.className = 'message';
-  if (!email) {
-    message.textContent = 'Skriv din e-post först, tryck sedan på "Glömt lösenordet?".';
-    return;
-  }
-  const { error } = await db.auth.resetPasswordForEmail(email, {
-    redirectTo: location.origin + location.pathname,
-  });
-  if (error) {
-    message.textContent = translateError(error);
-  } else {
-    message.className = 'message ok';
-    message.textContent = 'Om adressen finns har ett mejl skickats med en länk.';
-  }
-});
+// ---------- Välj nytt lösenord ----------
 
 $('password-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const button = e.submitter;
-  const message = $('password-message');
-  button.disabled = true;
+  const form = e.currentTarget;
+  clearErrors();
+  if (!validatePassword($('new-password'), 8)) return;
 
+  setLoading(form, true, 'Sparar…');
   const { data, error } = await db.auth.updateUser({ password: $('new-password').value });
+  setLoading(form, false);
 
-  button.disabled = false;
   if (error) {
-    message.textContent = translateError(error);
+    setFormError('password-message', translateError(error));
     return;
   }
   needsNewPassword = false;
