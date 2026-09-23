@@ -60,6 +60,11 @@ window.RISK = {
     birdstrike: 45,
   },
 
+  // ---------- Risken sjunker med tiden ----------
+  // Varje gång så här många timmar gått sedan djuret sågs sjunker risken en nivå.
+  // Efter Låg blir observationen "inaktuell" och ingår inte längre i klassningen.
+  DECAY_HOURS: 24,
+
   // ---------- Nivåer och rekommenderad åtgärd ----------
   LEVELS: [
     { min: 70, key: 'kritisk', label: 'Kritisk', color: '#b71c1c', action: 'Kontakta tornet direkt.' },
@@ -210,7 +215,7 @@ window.RISK = {
   };
 
   // kind = 'fagel', 'daggdjur' eller 'annat'
-  R.assess = function ({ species, groupKey, kind, count, lat, lng, zones, reportType }) {
+  R.assess = function ({ species, groupKey, kind, count, lat, lng, zones, reportType, observedAt, now }) {
     const severity = R.severityFor(species, groupKey);
     const hits = R.zonesAt(lat, lng, zones || []);
     const factorOf = (zoneKey) => {
@@ -225,7 +230,23 @@ window.RISK = {
     const calculated = Math.min(100, Math.round(severity * 10 * zoneFactor * flock));
     // Vissa rapporttyper har en lägsta nivå (t.ex. birdstrike = alltid minst Hög)
     const minScore = R.MIN_SCORE_BY_TYPE[reportType] ?? 0;
-    const score = Math.max(calculated, minScore);
-    return { score, calculated, minScore, raisedByType: score > calculated, level: R.levelFor(score), severity, zone: best, zoneFactor, flock, hits };
+    const baseScore = Math.max(calculated, minScore);
+    const baseLevel = R.levelFor(baseScore);
+
+    // Sänk en nivå per påbörjat dygn (DECAY_HOURS) sedan djuret sågs
+    const ageHours = observedAt ? Math.max(0, ((now ?? Date.now()) - new Date(observedAt).getTime()) / 3600000) : 0;
+    const stepsDown = Math.floor(ageHours / R.DECAY_HOURS);
+    const levelIndex = R.LEVELS.indexOf(baseLevel) + stepsDown;   // LEVELS går från högst till lägst
+    const expired = levelIndex >= R.LEVELS.length;
+    const level = expired ? R.LEVELS[R.LEVELS.length - 1] : R.LEVELS[levelIndex];
+    // Poängen får inte vara högre än den nya nivåns tak
+    const cap = levelIndex <= 0 ? 100 : (R.LEVELS[levelIndex - 1]?.min ?? 1) - 1;
+    const score = expired ? 0 : Math.min(baseScore, cap);
+
+    return {
+      score, level, expired, stepsDown, ageHours, baseScore, baseLevel,
+      calculated, minScore, raisedByType: baseScore > calculated,
+      severity, zone: best, zoneFactor, flock, hits,
+    };
   };
 })();

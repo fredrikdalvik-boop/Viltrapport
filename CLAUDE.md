@@ -82,6 +82,8 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 ## Riskanalys
 - Poäng 0–100 = allvarlighet (1–10, `GROUP_SEVERITY`/`SPECIES_SEVERITY`) × 10 × lägesfaktor × flockfaktor, max 100.
   Nivåer: Låg <20, Medel 20–44, Hög 45–69, Kritisk ≥70 (`RISK.LEVELS`, med rekommenderad åtgärd).
+- Nedtrappning: risken sjunker en nivå per `RISK.DECAY_HOURS` (24 h) räknat från `observed_at`. Poängen kapas till nya nivåns tak.
+  Efter Låg blir den `expired` ("Inaktuell") och räknas inte i aktiva/sammanfattning. Hanterade (åtgärd) räknas som hanterade oavsett ålder.
 - `RISK.MIN_SCORE_BY_TYPE`: lägsta poäng per rapporttyp. Birdstrike = alltid minst 45 (Hög). Riskrapporten visar när poängen höjts av typen.
 - Läge (`RISK.ZONES`, olika för fågel/däggdjur): runway 1.0/1.0, taxiway 0.85/0.95, approach 0.9/0.2, airside 0.6/0.9, near 0.3/0.25, outside 0.1/0.05. Högsta zonen gäller.
 - Zoner i tabellen `risk_zones (name, zone_type, points jsonb)`, ritas av admin i appen (`startDraw()`, ritpanelen `#draw-panel`):
@@ -90,7 +92,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Åtgärder i `report_actions (report_id, action, comment, created_by, created_at)`. `RISK.ACTIONS[x].closes` = hanterar risken
   (skrämt bort, skrämselskott, avlivat, kunde inte bekräfta, borta vid kontroll). Risken sjunker inte av tid – bara av åtgärd.
 - Fliken "⚠️ Risk" (`#risk-view`): sammanfattning, Aktiva/Hanterade/Alla, lista sorterad på poäng, zonlista. Riskrapport i `#risk-sheet`.
-- Riskzonerna är ett eget lager på kartan ("⚠️ Riskzoner").
+- Riskzonerna är ett eget lager på kartan ("⚠️ Riskzoner"), kan också slås av/på i filterpanelen (`#filter-riskzones`, sparas i `layerPrefs.risk`).
 
 ## Rapporttyper
 - `REPORT_TYPES` i app.js. Väljs överst i formuläret (`#type-picker`). Vid olycka/birdstrike heter fältet "Viltslag".

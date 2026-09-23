@@ -1183,9 +1183,27 @@ function syncFilterForm() {
   });
 }
 
+function syncRiskZoneToggle() {
+  const on = Boolean(riskLayer && map?.hasLayer(riskLayer));
+  document.querySelectorAll('#filter-riskzones [data-zones]').forEach((b) => {
+    b.classList.toggle('selected', (b.dataset.zones === 'on') === on);
+  });
+}
+
+$('filter-riskzones').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-zones]');
+  if (!b || !riskLayer || !map) return;
+  // Samma lager som i lagerknappen – valet sparas där också
+  if (b.dataset.zones === 'on') riskLayer.addTo(map);
+  else riskLayer.remove();
+  saveLayerPrefs({ risk: b.dataset.zones === 'on' });
+  syncRiskZoneToggle();
+});
+
 function openFilter() {
   closeSheet();
   closeRisk();
+  syncRiskZoneToggle();
   closeSettings();
   updateFilterOptions();
   syncFilterForm();
@@ -1371,6 +1389,7 @@ function assessReport(r) {
     lng: r.lng,
     zones: riskZones,
     reportType: typeOf(r),
+    observedAt: r.observed_at,
   });
 }
 
@@ -1386,16 +1405,23 @@ function closingAction(reportId) {
 function riskPill(r) {
   const a = assessReport(r);
   const done = closingAction(r.id);
+  if (a.expired && !done) return '<span class="risk-pill resolved">⏳ Inaktuell risk</span>';
   return `<span class="risk-pill ${done ? 'resolved' : ''}" style="--level:${a.level.color}">
     ⚠️ ${a.score} · ${a.level.label}${done ? ' · hanterad' : ''}</span>`;
+}
+
+// "2 dygn" / "5 tim" – hur gammal observationen är
+function ageText(hours) {
+  return hours >= 48 ? `${Math.floor(hours / 24)} dygn` : hours >= 24 ? '1 dygn' : `${Math.max(0, Math.floor(hours))} tim`;
 }
 
 function renderRisk(list) {
   if (!$('risk-list')) return;
   const rows = list.map((r) => ({ r, a: assessReport(r), done: closingAction(r.id) }));
 
-  // Sammanfattning: antal aktiva per nivå
-  const active = rows.filter((x) => !x.done);
+  // Sammanfattning: antal aktiva per nivå (inaktuella och hanterade räknas inte)
+  const isActive = (x) => !x.done && !x.a.expired;
+  const active = rows.filter(isActive);
   $('risk-summary').innerHTML = RISK.LEVELS.map((l) => `
     <div class="risk-count" style="--level:${l.color}">
       <strong>${active.filter((x) => x.a.level.key === l.key).length}</strong>${l.label}
@@ -1407,17 +1433,20 @@ function renderRisk(list) {
   $('risk-nozones').hidden = riskZones.length > 0;
 
   const shown = rows
-    .filter((x) => riskStatus === 'all' || (riskStatus === 'active' ? !x.done : x.done))
+    .filter((x) => riskStatus === 'all' || (riskStatus === 'active' ? isActive(x) : x.done))
     .sort((x, y) => y.a.score - x.a.score || new Date(y.r.observed_at) - new Date(x.r.observed_at));
 
   $('risk-list').innerHTML = shown.map(({ r, a, done }) => `
-    <li class="report-card risk-card" data-action="risk" data-id="${r.id}" style="border-left-color:${a.level.color}">
-      <div class="risk-score ${done ? 'resolved' : ''}" style="--level:${a.level.color}">${a.score}<small>${a.level.label}</small></div>
+    <li class="report-card risk-card" data-action="risk" data-id="${r.id}" style="border-left-color:${a.expired && !done ? 'var(--muted)' : a.level.color}">
+      ${a.expired && !done
+        ? '<div class="risk-score resolved">⏳<small>Inaktuell</small></div>'
+        : `<div class="risk-score ${done ? 'resolved' : ''}" style="--level:${a.level.color}">${a.score}<small>${a.level.label}</small></div>`}
       <div class="risk-card-body">
         <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st) ${typeBadge(r)}</h3>
         <p>📍 ${escapeHtml(a.zone.name)}</p>
         <p>🕒 ${formatDateTime(r.observed_at)} · ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
         ${done ? `<p>✅ ${RISK.ACTIONS[done.action].label}</p>` : ''}
+        ${!done && a.stepsDown && !a.expired ? `<p>⏬ Sänkt ${a.stepsDown} ${a.stepsDown === 1 ? 'nivå' : 'nivåer'} (${ageText(a.ageHours)} gammal)</p>` : ''}
       </div>
       <span class="chev">›</span>
     </li>`).join('') || `<li class="hint">${
@@ -1463,18 +1492,25 @@ function renderRiskSheet() {
   const raw = a.severity * 10 * a.zoneFactor * a.flock;
   const otherZones = a.hits.filter((h) => h !== a.zone).map((h) => h.name);
 
+  const expired = a.expired && !done;
   $('risk-content').innerHTML = `
     <div class="risk-head">
-      <div class="risk-score big ${done ? 'resolved' : ''}" style="--level:${a.level.color}">${a.score}<small>av 100</small></div>
+      ${expired
+        ? '<div class="risk-score big resolved">⏳<small>inaktuell</small></div>'
+        : `<div class="risk-score big ${done ? 'resolved' : ''}" style="--level:${a.level.color}">${a.score}<small>av 100</small></div>`}
       <div>
-        <h3 style="color:${a.level.color}">${a.level.label} risk</h3>
-        <p><strong>Rekommenderad åtgärd:</strong> ${a.level.action}</p>
+        <h3 style="color:${expired ? 'var(--muted)' : a.level.color}">${expired ? 'Inaktuell' : `${a.level.label} risk`}</h3>
+        <p>${expired
+          ? `Observationen är ${ageText(a.ageHours)} gammal och ingår inte längre i klassningen.`
+          : `<strong>Rekommenderad åtgärd:</strong> ${a.level.action}`}</p>
       </div>
     </div>
-    <div class="risk-status-line ${done ? 'resolved' : 'active'}">
+    <div class="risk-status-line ${done || expired ? 'resolved' : 'active'}">
       ${done
         ? `✅ Hanterad: ${RISK.ACTIONS[done.action].label} – ${escapeHtml(nameFor(done.created_by))}, ${formatDateTime(done.created_at)}`
-        : '🔴 Aktiv – risken finns kvar tills en åtgärd som skrämt bort, skrämselskott eller avlivat registrerats.'}
+        : expired
+          ? '⏳ Inaktuell – risken har sjunkit en nivå per dygn och är nu under Låg.'
+          : `🔴 Aktiv – finns kvar tills en åtgärd registrerats (eller sjunker en nivå per dygn).`}
     </div>
 
     <h4 class="risk-section">Så räknades poängen</h4>
@@ -1483,8 +1519,10 @@ function renderRiskSheet() {
       <tr><td>Läge: ${escapeHtml(a.zone.name)}<br><small>${RISK.ZONES[a.zone.zone].label}${
         otherZones.length ? ` · även: ${escapeHtml(otherZones.join(', '))}` : ''}</small></td><td>× ${a.zoneFactor}</td></tr>
       <tr><td>Antal: ${r.animal_count} st</td><td>× ${a.flock}</td></tr>
-      <tr ${a.raisedByType ? '' : 'class="total"'}><td>${a.severity} × 10 × ${a.zoneFactor} × ${a.flock} = ${Math.round(raw)}${raw > 100 ? ' (max 100)' : ''}</td><td>${a.calculated}</td></tr>
-      ${a.raisedByType ? `<tr class="total"><td>${REPORT_TYPES[typeOf(r)].label} är alltid minst ${RISK.levelFor(a.minScore).label} (${a.minScore})</td><td>${a.score}</td></tr>` : ''}
+      <tr ${a.raisedByType || a.stepsDown ? '' : 'class="total"'}><td>${a.severity} × 10 × ${a.zoneFactor} × ${a.flock} = ${Math.round(raw)}${raw > 100 ? ' (max 100)' : ''}</td><td>${a.calculated}</td></tr>
+      ${a.raisedByType ? `<tr ${a.stepsDown ? '' : 'class="total"'}><td>${REPORT_TYPES[typeOf(r)].label} är alltid minst ${RISK.levelFor(a.minScore).label} (${a.minScore})</td><td>${a.baseScore}</td></tr>` : ''}
+      ${a.stepsDown ? `<tr class="total"><td>Ålder ${ageText(a.ageHours)}: sänkt ${a.stepsDown} ${a.stepsDown === 1 ? 'nivå' : 'nivåer'}
+        (${a.baseLevel.label} → ${a.expired ? 'inaktuell' : a.level.label})</td><td>${a.expired ? '–' : a.score}</td></tr>` : ''}
     </table>
 
     <h4 class="risk-section">Rapporten</h4>
