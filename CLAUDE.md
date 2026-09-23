@@ -82,6 +82,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 ## Riskanalys
 - Poäng 0–100 = allvarlighet (1–10, `GROUP_SEVERITY`/`SPECIES_SEVERITY`) × 10 × lägesfaktor × flockfaktor, max 100.
   Nivåer: Låg <20, Medel 20–44, Hög 45–69, Kritisk ≥70 (`RISK.LEVELS`, med rekommenderad åtgärd).
+- `RISK.MIN_SCORE_BY_TYPE`: lägsta poäng per rapporttyp. Birdstrike = alltid minst 45 (Hög). Riskrapporten visar när poängen höjts av typen.
 - Läge (`RISK.ZONES`, olika för fågel/däggdjur): runway 1.0/1.0, taxiway 0.85/0.95, approach 0.9/0.2, airside 0.6/0.9, near 0.3/0.25, outside 0.1/0.05. Högsta zonen gäller.
 - Zoner i tabellen `risk_zones (name, zone_type, points jsonb)`, ritas av admin i appen (`startDraw()`, ritpanelen `#draw-panel`):
   `runway` = 2 punkter (banändar) → banområde ±150 m och in-/utflygning 3 km som vidgas 15 % (`RISK.runwayShapes`);

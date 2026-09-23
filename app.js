@@ -1370,6 +1370,7 @@ function assessReport(r) {
     lat: r.lat,
     lng: r.lng,
     zones: riskZones,
+    reportType: typeOf(r),
   });
 }
 
@@ -1482,7 +1483,8 @@ function renderRiskSheet() {
       <tr><td>Läge: ${escapeHtml(a.zone.name)}<br><small>${RISK.ZONES[a.zone.zone].label}${
         otherZones.length ? ` · även: ${escapeHtml(otherZones.join(', '))}` : ''}</small></td><td>× ${a.zoneFactor}</td></tr>
       <tr><td>Antal: ${r.animal_count} st</td><td>× ${a.flock}</td></tr>
-      <tr class="total"><td>${a.severity} × 10 × ${a.zoneFactor} × ${a.flock} = ${Math.round(raw)}${raw > 100 ? ' (max 100)' : ''}</td><td>${a.score}</td></tr>
+      <tr ${a.raisedByType ? '' : 'class="total"'}><td>${a.severity} × 10 × ${a.zoneFactor} × ${a.flock} = ${Math.round(raw)}${raw > 100 ? ' (max 100)' : ''}</td><td>${a.calculated}</td></tr>
+      ${a.raisedByType ? `<tr class="total"><td>${REPORT_TYPES[typeOf(r)].label} är alltid minst ${RISK.levelFor(a.minScore).label} (${a.minScore})</td><td>${a.score}</td></tr>` : ''}
     </table>
 
     <h4 class="risk-section">Rapporten</h4>

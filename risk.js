@@ -54,6 +54,12 @@ window.RISK = {
     { min: 1,  factor: 1.0 },
   ],
 
+  // ---------- Lägsta poäng per rapporttyp ----------
+  // En birdstrike har redan hänt och är alltid minst Hög risk (45 = gränsen för Hög).
+  MIN_SCORE_BY_TYPE: {
+    birdstrike: 45,
+  },
+
   // ---------- Nivåer och rekommenderad åtgärd ----------
   LEVELS: [
     { min: 70, key: 'kritisk', label: 'Kritisk', color: '#b71c1c', action: 'Kontakta tornet direkt.' },
@@ -204,7 +210,7 @@ window.RISK = {
   };
 
   // kind = 'fagel', 'daggdjur' eller 'annat'
-  R.assess = function ({ species, groupKey, kind, count, lat, lng, zones }) {
+  R.assess = function ({ species, groupKey, kind, count, lat, lng, zones, reportType }) {
     const severity = R.severityFor(species, groupKey);
     const hits = R.zonesAt(lat, lng, zones || []);
     const factorOf = (zoneKey) => {
@@ -216,7 +222,10 @@ window.RISK = {
     const best = hits.reduce((a, b) => (factorOf(b.zone) > factorOf(a.zone) ? b : a));
     const zoneFactor = factorOf(best.zone);
     const flock = R.flockFactor(Math.max(1, Number(count) || 1));
-    const score = Math.min(100, Math.round(severity * 10 * zoneFactor * flock));
-    return { score, level: R.levelFor(score), severity, zone: best, zoneFactor, flock, hits };
+    const calculated = Math.min(100, Math.round(severity * 10 * zoneFactor * flock));
+    // Vissa rapporttyper har en lägsta nivå (t.ex. birdstrike = alltid minst Hög)
+    const minScore = R.MIN_SCORE_BY_TYPE[reportType] ?? 0;
+    const score = Math.max(calculated, minScore);
+    return { score, calculated, minScore, raisedByType: score > calculated, level: R.levelFor(score), severity, zone: best, zoneFactor, flock, hits };
   };
 })();
