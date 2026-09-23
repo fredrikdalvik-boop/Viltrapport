@@ -76,6 +76,29 @@ create table if not exists public.custom_species (
 create unique index if not exists custom_species_name_key
   on public.custom_species (lower(btrim(name)));
 
+-- Riskzoner som admin ritar i appen: bana (2 punkter), taxibana (linje), stängsel (yta)
+create table if not exists public.risk_zones (
+  id         bigint generated always as identity primary key,
+  name       text not null check (char_length(btrim(name)) between 1 and 60),
+  zone_type  text not null check (zone_type in ('runway', 'taxiway', 'airside')),
+  points     jsonb not null check (jsonb_typeof(points) = 'array' and jsonb_array_length(points) between 2 and 500),
+  created_by uuid default auth.uid() references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- Åtgärder på en rapport (skrämt bort, skrämselskott …). Vissa åtgärder "stänger" risken.
+create table if not exists public.report_actions (
+  id         bigint generated always as identity primary key,
+  report_id  bigint not null references public.reports (id) on delete cascade,
+  action     text not null check (action in (
+               'bortskramt', 'skramselskott', 'avlivat', 'ej_bekraftat', 'borta',
+               'bevakas', 'tornet', 'ovrigt')),
+  comment    text check (comment is null or char_length(comment) <= 500),
+  created_by uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index if not exists report_actions_report_idx on public.report_actions (report_id);
+
 -- Inställningar (t.ex. inbjudningskoden). Bara admins kan läsa.
 create table if not exists public.app_settings (
   key   text primary key,
@@ -251,6 +274,8 @@ alter table public.reports        enable row level security;
 alter table public.profiles       enable row level security;
 alter table public.custom_species enable row level security;
 alter table public.app_settings   enable row level security;
+alter table public.risk_zones     enable row level security;
+alter table public.report_actions enable row level security;
 
 -- Rapporter: medlemmar ser allt och skapar egna. Ägaren eller admin ändrar/tar bort.
 drop policy if exists "Inloggade kan läsa alla rapporter" on public.reports;
@@ -311,6 +336,44 @@ create policy "Admin kan ta bort arter"
   on public.custom_species for delete to authenticated
   using ((select public.is_admin()));
 
+-- Riskzoner: alla medlemmar ser dem, bara admin ritar/ändrar/tar bort
+drop policy if exists "Medlemmar ser riskzoner" on public.risk_zones;
+create policy "Medlemmar ser riskzoner"
+  on public.risk_zones for select to authenticated
+  using ((select public.is_member()));
+
+drop policy if exists "Admin skapar riskzoner" on public.risk_zones;
+create policy "Admin skapar riskzoner"
+  on public.risk_zones for insert to authenticated
+  with check ((select public.is_admin()));
+
+drop policy if exists "Admin ändrar riskzoner" on public.risk_zones;
+create policy "Admin ändrar riskzoner"
+  on public.risk_zones for update to authenticated
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
+
+drop policy if exists "Admin tar bort riskzoner" on public.risk_zones;
+create policy "Admin tar bort riskzoner"
+  on public.risk_zones for delete to authenticated
+  using ((select public.is_admin()));
+
+-- Åtgärder: medlemmar ser och registrerar. Man tar bort sina egna, admin allas.
+drop policy if exists "Medlemmar ser åtgärder" on public.report_actions;
+create policy "Medlemmar ser åtgärder"
+  on public.report_actions for select to authenticated
+  using ((select public.is_member()));
+
+drop policy if exists "Medlemmar registrerar åtgärder" on public.report_actions;
+create policy "Medlemmar registrerar åtgärder"
+  on public.report_actions for insert to authenticated
+  with check ((select public.is_member()) and created_by = (select auth.uid()));
+
+drop policy if exists "Egna eller admin tar bort åtgärder" on public.report_actions;
+create policy "Egna eller admin tar bort åtgärder"
+  on public.report_actions for delete to authenticated
+  using (created_by = (select auth.uid()) or (select public.is_admin()));
+
 -- Inställningar: bara admin kan läsa (ändringar sker via set_signup_code)
 drop policy if exists "Admin kan läsa inställningar" on public.app_settings;
 create policy "Admin kan läsa inställningar"
@@ -323,14 +386,19 @@ create policy "Admin kan läsa inställningar"
 -- =============================================================
 
 -- Den som inte är inloggad (anon) får ingen åtkomst alls
-revoke all on public.reports, public.profiles, public.custom_species, public.app_settings from anon;
-revoke all on public.reports, public.profiles, public.custom_species, public.app_settings from authenticated;
+revoke all on public.reports, public.profiles, public.custom_species, public.app_settings,
+             public.risk_zones, public.report_actions from anon;
+revoke all on public.reports, public.profiles, public.custom_species, public.app_settings,
+             public.risk_zones, public.report_actions from authenticated;
 
 grant select, insert, update, delete on public.reports to authenticated;
 grant select on public.profiles to authenticated;
 grant update (color, full_name, updated_at) on public.profiles to authenticated;  -- färg och eget namn, inte admin!
 grant select, insert, delete on public.custom_species to authenticated;
 grant select on public.app_settings to authenticated;
+grant select, insert, update, delete on public.risk_zones to authenticated;
+grant select, delete on public.report_actions to authenticated;
+grant insert (report_id, action, comment) on public.report_actions to authenticated;  -- vem/när sätts automatiskt
 
 revoke execute on function public.redeem_signup_code(text) from public, anon;
 revoke execute on function public.set_signup_code(text) from public, anon;

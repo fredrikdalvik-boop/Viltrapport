@@ -29,6 +29,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `style.css` | Mobil först, stora knappar |
 | `app.js` | All logik: auth, karta, CRUD, filter/sortering, artförslag |
 | `config.js` | Supabase-URL, publishable-nyckel, kartans centrum och zoom |
+| `risk.js` | `window.RISK`: alla riskinställningar (allvarlighet per grupp/art, zonfaktorer, flock, nivåer, åtgärder, zontyper) + geometri och `RISK.assess()` |
 | `species.js` | `SPECIES_GROUPS` (grupp → etikett + emoji-ikon, ev. `fallback`) och `SPECIES` (`[namn, grupp]`, ca 300 arter) |
 | `icons/hero-scene.svg` | Startsidans illustration från Claude Design (viewBox 480×440, `xMidYMax slice`). Används som den är. Himlens gradient ligger på `.hero` i CSS |
 | `sw.js` | Service worker. Egna filer: network-first. CDN: cache-first. Supabase och kartbilder cachas inte |
@@ -77,6 +78,18 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Emoji som äldre telefoner saknar (🫎, 🪿, 🐦‍⬛) kontrolleras med canvas och byts mot `fallback`.
 - Skriver man en okänd art visas "Ny art!" med val av grupp. Arten sparas i `custom_species`.
 - Varje grupp i `SPECIES_GROUPS` har `kind`: `daggdjur`, `fagel` eller `annat`.
+
+## Riskanalys
+- Poäng 0–100 = allvarlighet (1–10, `GROUP_SEVERITY`/`SPECIES_SEVERITY`) × 10 × lägesfaktor × flockfaktor, max 100.
+  Nivåer: Låg <20, Medel 20–44, Hög 45–69, Kritisk ≥70 (`RISK.LEVELS`, med rekommenderad åtgärd).
+- Läge (`RISK.ZONES`, olika för fågel/däggdjur): runway 1.0/1.0, taxiway 0.85/0.95, approach 0.9/0.2, airside 0.6/0.9, near 0.3/0.25, outside 0.1/0.05. Högsta zonen gäller.
+- Zoner i tabellen `risk_zones (name, zone_type, points jsonb)`, ritas av admin i appen (`startDraw()`, ritpanelen `#draw-panel`):
+  `runway` = 2 punkter (banändar) → banområde ±150 m och in-/utflygning 3 km som vidgas 15 % (`RISK.runwayShapes`);
+  `taxiway` = linje ±45 m; `airside` = yta innanför stängslet, "nära" = inom 500 m utanför.
+- Åtgärder i `report_actions (report_id, action, comment, created_by, created_at)`. `RISK.ACTIONS[x].closes` = hanterar risken
+  (skrämt bort, skrämselskott, avlivat, kunde inte bekräfta, borta vid kontroll). Risken sjunker inte av tid – bara av åtgärd.
+- Fliken "⚠️ Risk" (`#risk-view`): sammanfattning, Aktiva/Hanterade/Alla, lista sorterad på poäng, zonlista. Riskrapport i `#risk-sheet`.
+- Riskzonerna är ett eget lager på kartan ("⚠️ Riskzoner").
 
 ## Rapporttyper
 - `REPORT_TYPES` i app.js. Väljs överst i formuläret (`#type-picker`). Vid olycka/birdstrike heter fältet "Viltslag".

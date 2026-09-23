@@ -16,6 +16,11 @@ sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
    - **Datum:** Idag, 7 dagar, 30 dagar eller egna datum.
    - Filtren går att kombinera. Tryck ✕ på en etikett för att ta bort ett filter. Appen kommer ihåg filtret.
 4. Dina egna rapporter kan du **redigera** eller **ta bort**.
+5. **⚠️ Risk:** varje rapport får en riskpoäng 0–100 (Låg/Medel/Hög/Kritisk) utifrån djurets storlek,
+   var det är (bana, inflygning, innanför stängsel …) och hur många. Tryck på en risk för att se varför
+   och registrera åtgärd (t.ex. Skrämselskott). Risken ligger kvar tills en åtgärd registrerats.
+6. **Admin:** ritar banor, taxibanor och stängsel under ⚠️ Risk → **Rita ny zon**. Inställningarna för
+   poängen finns i `risk.js`.
 
 ## Installera på mobilen
 - **Android (Chrome):** meny ⋮ → *Lägg till på startskärmen* / *Installera app*.

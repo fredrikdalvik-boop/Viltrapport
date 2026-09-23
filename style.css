@@ -851,3 +851,124 @@ main { flex: 1; position: relative; overflow: hidden; }
   }
   #list-view { max-width: 800px; margin: 0 auto; }
 }
+
+/* ===== Riskanalys ===== */
+#risk-view { overflow-y: auto; padding: 12px 12px 24px; }
+.risk-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+.risk-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border-top: 4px solid var(--level, var(--border));
+  font-size: 13px;
+  color: var(--muted);
+}
+.risk-count strong { font-size: 22px; color: var(--text); line-height: 1.1; }
+.risk-status { margin-bottom: 10px; }
+
+/* Poäng som färgad etikett */
+.risk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--level);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.risk-pill.resolved { background: var(--muted); }
+.risk-card { display: flex; gap: 12px; align-items: center; cursor: pointer; }
+.risk-card .risk-score { flex: none; }
+.risk-card-body { flex: 1; min-width: 0; }
+.risk-card h3 { margin: 0 0 2px; font-size: 17px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.risk-card p { margin: 1px 0; font-size: 14px; color: var(--muted); }
+.risk-card .chev { color: var(--muted); font-size: 22px; }
+
+/* Stor poängcirkel */
+.risk-score {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--level);
+  color: #fff;
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1;
+  box-shadow: 0 2px 6px var(--shadow);
+}
+.risk-score small { font-size: 10px; font-weight: 700; opacity: .9; margin-top: 2px; }
+.risk-score.big { width: 84px; height: 84px; font-size: 34px; }
+.risk-score.resolved { background: var(--muted); }
+
+.risk-head { display: flex; gap: 14px; align-items: center; margin: 4px 0 10px; }
+.risk-head h3 { margin: 0; font-size: 22px; }
+.risk-head p { margin: 2px 0; font-size: 15px; }
+.risk-status-line { padding: 8px 10px; border-radius: 10px; font-size: 15px; margin-bottom: 8px; }
+.risk-status-line.active { background: var(--danger-soft); color: var(--red); }
+.risk-status-line.resolved { background: var(--green-light); color: var(--green-ink); }
+.risk-table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 4px 0 8px; }
+.risk-table td { padding: 6px 4px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+.risk-table td:last-child { text-align: right; font-weight: 700; white-space: nowrap; }
+.risk-table tr.total td { border-bottom: none; font-size: 16px; }
+.risk-section { margin: 12px 0 4px; font-size: 16px; }
+.action-log { list-style: none; margin: 0; padding: 0; }
+.action-log li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--border-soft); font-size: 14px; }
+.action-log li > span { flex: 1; min-width: 0; }
+.action-log small { color: var(--muted); display: block; }
+.action-log .btn { min-height: 34px; padding: 0 10px; font-size: 13px; }
+.action-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 6px; }
+.action-grid button {
+  min-height: 42px;
+  padding: 4px 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.action-grid button.closes { border-color: var(--green-ink); }
+.action-grid .grid-title { grid-column: 1 / -1; font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+/* Lista över riskzoner */
+.risk-zones-box { margin-top: 18px; padding: 12px; border-radius: var(--radius); background: var(--surface); }
+.risk-zones-box h3 { margin: 0 0 2px; font-size: 17px; }
+.btn-block { width: 100%; margin-top: 10px; }
+.zone-dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+
+/* Ritpanel för riskzoner */
+.draw-panel {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: calc(var(--tabbar-h) + 8px + env(safe-area-inset-bottom));
+  z-index: 1000;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 6px 24px var(--shadow);
+  font-size: 15px;
+}
+.draw-panel input { min-height: 42px; margin-top: 8px; padding: 6px 10px; font-size: 16px; }
+.draw-panel .hint { margin: 6px 0 0; }
+.draw-panel .segmented button { min-height: 38px; font-size: 14px; }
+.draw-buttons { display: flex; gap: 6px; margin-top: 8px; }
+.draw-buttons .btn { flex: 1; min-height: 42px; margin: 0; padding: 0 8px; font-size: 15px; }
+.drawing .map-hint { background: #1565c0; color: #fff; }
+@media (min-width: 800px) {
+  .draw-panel { left: auto; width: 420px; right: 16px; }
+}

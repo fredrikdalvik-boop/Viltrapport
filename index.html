@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
   <section id="auth-view" class="auth-view" hidden>
     <div class="auth-col">
       <div class="hero">
-        <img class="hero-img" src="icons/hero-scene.svg?v=12"
+        <img class="hero-img" src="icons/hero-scene.svg?v=13"
              alt="Två jägare med gevär på ryggen går med en labrador och en beagle i granskogen i solnedgången">
         <div class="hero-scrim"></div>
         <!-- Appens namn fylls i från CONFIG.APP_NAME i config.js -->
@@ -208,11 +208,33 @@
       <section id="list-view" class="view" hidden>
         <ul id="report-list" class="report-list"></ul>
       </section>
+
+      <!-- Riskanalys -->
+      <section id="risk-view" class="view" hidden>
+        <div class="risk-summary" id="risk-summary"></div>
+        <div class="segmented risk-status" id="risk-status">
+          <button type="button" data-status="active">Aktiva</button>
+          <button type="button" data-status="resolved">Hanterade</button>
+          <button type="button" data-status="all">Alla</button>
+        </div>
+        <p id="risk-nozones" class="hint name-missing" hidden>
+          Inga riskzoner är ritade än, så läget kan inte bedömas. En admin behöver rita banor, taxibanor och stängsel nedan.
+        </p>
+        <ul id="risk-list" class="report-list"></ul>
+
+        <div class="risk-zones-box">
+          <h3>Riskzoner</h3>
+          <p class="hint">Banor (med in-/utflygning 3 km), taxibanor och området innanför stängslet.</p>
+          <ul id="zone-list" class="admin-list"></ul>
+          <button type="button" id="draw-start" class="btn btn-secondary btn-block" hidden>✏️ Rita ny zon</button>
+        </div>
+      </section>
     </main>
 
     <nav class="tabbar">
       <button class="tab active" data-view="map-view">🗺️ Karta</button>
       <button class="tab" data-view="list-view">📋 Lista</button>
+      <button class="tab" data-view="risk-view">⚠️ Risk</button>
     </nav>
 
     <!-- Rapportformulär (glider upp nedifrån) -->
@@ -261,6 +283,39 @@
           <button type="submit" id="save-btn" class="btn btn-primary">Spara</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Riskrapport för en rapport -->
+  <div id="risk-sheet" class="sheet" hidden>
+    <h2>Riskanalys</h2>
+    <div id="risk-content"></div>
+
+    <label for="action-comment">Registrera åtgärd</label>
+    <input id="action-comment" type="text" maxlength="500" placeholder="Kommentar (valfritt)">
+    <div class="action-grid" id="action-grid"></div>
+    <p id="risk-message" class="message" role="alert"></p>
+
+    <div class="sheet-buttons">
+      <button type="button" id="risk-show-map" class="btn btn-secondary">Visa på kartan</button>
+      <button type="button" id="risk-close" class="btn btn-primary">Stäng</button>
+    </div>
+  </div>
+
+  <!-- Rita riskzon (admin) -->
+  <div id="draw-panel" class="draw-panel" hidden>
+    <div class="segmented" id="draw-type">
+      <button type="button" data-zone-type="runway">🛬 Bana</button>
+      <button type="button" data-zone-type="taxiway">〰️ Taxibana</button>
+      <button type="button" data-zone-type="airside">🔲 Stängsel</button>
+    </div>
+    <input id="draw-name" type="text" maxlength="60" placeholder="Namn, t.ex. Bana 01L/19R">
+    <p id="draw-hint" class="hint"></p>
+    <p id="draw-message" class="message" role="alert"></p>
+    <div class="draw-buttons">
+      <button type="button" id="draw-undo" class="btn btn-secondary">↩︎ Ångra</button>
+      <button type="button" id="draw-cancel" class="btn btn-secondary">Avbryt</button>
+      <button type="button" id="draw-save" class="btn btn-primary">Spara zon</button>
     </div>
   </div>
 
@@ -367,8 +422,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=12"></script>
-  <script src="species.js?v=12"></script>
-  <script src="app.js?v=12"></script>
+  <script src="config.js?v=13"></script>
+  <script src="species.js?v=13"></script>
+  <script src="risk.js?v=13"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

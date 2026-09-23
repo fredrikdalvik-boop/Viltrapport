@@ -19,6 +19,9 @@ let userColors = new Map();   // user_id → vald färg
 let customSpecies = [];       // arter som användarna lagt till själva
 let profiles = [];            // alla användares profiler (e-post, admin …)
 let isAdmin = false;          // är den inloggade admin?
+let riskZones = [];           // banor, taxibanor och stängsel (ritas av admin)
+let reportActions = [];       // åtgärder på rapporter (skrämt bort …)
+let riskLayer = null;         // kartlager som visar riskzonerna
 
 // Färger man kan välja mellan
 const COLORS = [
@@ -248,6 +251,7 @@ $('color-picker').addEventListener('click', async (e) => {
 
 function openSettings() {
   closeSheet();
+  closeRisk();
   closeFilter();
   $('user-email').textContent = (currentUser?.email ?? '') + (isAdmin ? ' (admin)' : '');
   $('settings-message').textContent = '';
@@ -753,10 +757,24 @@ function initMap() {
   const layersControl = L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true }).addTo(map);
   loadAreas(layersControl);
 
+  // Riskzoner (banor, in-/utflygning, taxibanor, stängsel)
+  riskLayer = L.layerGroup();
+  if (layerPrefs.risk !== false) riskLayer.addTo(map);
+  layersControl.addOverlay(riskLayer, '⚠️ Riskzoner');
+  map.on('overlayadd overlayremove', (e) => {
+    if (e.layer === riskLayer) saveLayerPrefs({ risk: e.type === 'overlayadd' });
+  });
+  drawRiskZones();
+
   markerLayer = L.layerGroup().addTo(map);
 
   // Tryck på kartan = placera (eller flytta) nålen
   map.on('click', (e) => {
+    // Ritar admin en riskzon blir trycket en ny punkt i zonen
+    if (drawing) {
+      addDrawPoint(e.latlng);
+      return;
+    }
     // Är filterpanelen öppen stänger första trycket bara den
     if (!$('filter-sheet').hidden) {
       closeFilter();
@@ -939,6 +957,7 @@ function tooltipHtml(r) {
       <span>🕒 ${formatDateTime(r.observed_at)}</span>
       <span><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</span>
       ${r.comment ? `<span class="tip-comment">💬 ${escapeHtml(r.comment.length > 60 ? r.comment.slice(0, 60) + '…' : r.comment)}</span>` : ''}
+      ${riskPill(r)}
       <span class="tip-hint">Klicka för mer</span>
     </div>`;
 }
@@ -952,6 +971,10 @@ function popupHtml(r) {
       <p>🕒 ${formatDateTime(r.observed_at)}</p>
       <p><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
       ${r.comment ? `<p>💬 ${escapeHtml(r.comment)}</p>` : ''}
+      <p>${riskPill(r)}</p>
+      <div class="actions">
+        <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">⚠️ Riskanalys</button>
+      </div>
       ${own ? `
         <div class="actions">
           <button class="btn btn-secondary" data-action="edit" data-id="${r.id}">Redigera</button>
@@ -963,10 +986,12 @@ function popupHtml(r) {
 // ---------- Hämta rapporter ----------
 
 async function loadReports() {
-  const [reportsResult, profilesResult, speciesResult] = await Promise.all([
+  const [reportsResult, profilesResult, speciesResult, zonesResult, actionsResult] = await Promise.all([
     db.from('reports').select('*').order('observed_at', { ascending: false }).limit(5000),
     db.from('profiles').select('user_id, color, email, full_name, is_admin, is_member'),
     db.from('custom_species').select('id, name, category').order('name'),
+    db.from('risk_zones').select('id, name, zone_type, points').order('zone_type').order('name'),
+    db.from('report_actions').select('id, report_id, action, comment, created_by, created_at').order('created_at'),
   ]);
 
   if (reportsResult.error) {
@@ -981,6 +1006,11 @@ async function loadReports() {
   }
   if (speciesResult.error) console.warn('Egna arter:', speciesResult.error.message);
   else customSpecies = speciesResult.data;
+  if (zonesResult.error) console.warn('Riskzoner:', zonesResult.error.message);
+  else riskZones = zonesResult.data;
+  if (actionsResult.error) console.warn('Åtgärder:', actionsResult.error.message);
+  else reportActions = actionsResult.data;
+  drawRiskZones();
 
   reports = reportsResult.data;
   updateFilterOptions();
@@ -1155,6 +1185,7 @@ function syncFilterForm() {
 
 function openFilter() {
   closeSheet();
+  closeRisk();
   closeSettings();
   updateFilterOptions();
   syncFilterForm();
@@ -1295,6 +1326,7 @@ function render() {
   const list = getFilteredReports();
   renderMarkers(list);
   renderList(list);
+  renderRisk(list);
   renderFilterBar(list.length);
   // Filterraden kan ändra höjd – då måste kartan räkna om sin storlek
   map?.invalidateSize();
@@ -1311,7 +1343,9 @@ function renderList(list) {
         <p>🕒 ${formatDateTime(r.observed_at)}</p>
         <p>👤 ${escapeHtml(nameFor(r.user_id, r.reporter_email))}${own ? ' (du)' : ''}</p>
         ${r.comment ? `<p class="comment">💬 ${escapeHtml(r.comment)}</p>` : ''}
+        <p>${riskPill(r)}</p>
         <div class="actions">
+          <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">⚠️ Risk</button>
           <button class="btn btn-secondary" data-action="show" data-id="${r.id}">Visa på kartan</button>
           ${canEdit(r) ? `
             <button class="btn btn-secondary" data-action="edit" data-id="${r.id}">Redigera</button>
@@ -1321,9 +1355,340 @@ function renderList(list) {
   }).join('') || `<li class="hint">${reports.length ? 'Inga rapporter matchar filtret.' : 'Inga rapporter än.'}</li>`;
 }
 
+// ---------- Riskanalys ----------
+// Beräkningen finns i risk.js. Här visas den och här registreras åtgärder.
+
+let riskStatus = 'active';   // vilka som visas i riskfliken: active, resolved, all
+let openRiskId = null;       // rapporten som visas i riskrutan
+
+function assessReport(r) {
+  return RISK.assess({
+    species: r.species,
+    groupKey: groupOf(r.species),
+    kind: kindOf(r.species),
+    count: r.animal_count,
+    lat: r.lat,
+    lng: r.lng,
+    zones: riskZones,
+  });
+}
+
+function actionsFor(reportId) {
+  return reportActions.filter((a) => a.report_id === reportId);
+}
+
+// Senaste åtgärden som "stänger" risken (skrämt bort, avlivat …), annars null
+function closingAction(reportId) {
+  return actionsFor(reportId).filter((a) => RISK.ACTIONS[a.action]?.closes).pop() ?? null;
+}
+
+function riskPill(r) {
+  const a = assessReport(r);
+  const done = closingAction(r.id);
+  return `<span class="risk-pill ${done ? 'resolved' : ''}" style="--level:${a.level.color}">
+    ⚠️ ${a.score} · ${a.level.label}${done ? ' · hanterad' : ''}</span>`;
+}
+
+function renderRisk(list) {
+  if (!$('risk-list')) return;
+  const rows = list.map((r) => ({ r, a: assessReport(r), done: closingAction(r.id) }));
+
+  // Sammanfattning: antal aktiva per nivå
+  const active = rows.filter((x) => !x.done);
+  $('risk-summary').innerHTML = RISK.LEVELS.map((l) => `
+    <div class="risk-count" style="--level:${l.color}">
+      <strong>${active.filter((x) => x.a.level.key === l.key).length}</strong>${l.label}
+    </div>`).join('');
+
+  document.querySelectorAll('#risk-status [data-status]').forEach((b) => {
+    b.classList.toggle('selected', b.dataset.status === riskStatus);
+  });
+  $('risk-nozones').hidden = riskZones.length > 0;
+
+  const shown = rows
+    .filter((x) => riskStatus === 'all' || (riskStatus === 'active' ? !x.done : x.done))
+    .sort((x, y) => y.a.score - x.a.score || new Date(y.r.observed_at) - new Date(x.r.observed_at));
+
+  $('risk-list').innerHTML = shown.map(({ r, a, done }) => `
+    <li class="report-card risk-card" data-action="risk" data-id="${r.id}" style="border-left-color:${a.level.color}">
+      <div class="risk-score ${done ? 'resolved' : ''}" style="--level:${a.level.color}">${a.score}<small>${a.level.label}</small></div>
+      <div class="risk-card-body">
+        <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st) ${typeBadge(r)}</h3>
+        <p>📍 ${escapeHtml(a.zone.name)}</p>
+        <p>🕒 ${formatDateTime(r.observed_at)} · ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
+        ${done ? `<p>✅ ${RISK.ACTIONS[done.action].label}</p>` : ''}
+      </div>
+      <span class="chev">›</span>
+    </li>`).join('') || `<li class="hint">${
+      riskStatus === 'active' ? 'Inga aktiva risker. 👍' : 'Inga rapporter att visa.'}</li>`;
+
+  renderZoneList();
+}
+
+$('risk-status').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-status]');
+  if (!b) return;
+  riskStatus = b.dataset.status;
+  render();
+});
+
+// ---------- Riskrapport för en rapport ----------
+
+function openRisk(report) {
+  closeSheet();
+  closeFilter();
+  closeSettings();
+  map?.closePopup();
+  openRiskId = report.id;
+  $('action-comment').value = '';
+  $('risk-message').textContent = '';
+  renderRiskSheet();
+  $('risk-sheet').hidden = false;
+  $('risk-sheet').scrollTop = 0;
+}
+
+function closeRisk() {
+  $('risk-sheet').hidden = true;
+  openRiskId = null;
+}
+
+function renderRiskSheet() {
+  const r = reports.find((x) => x.id === openRiskId);
+  if (!r) return closeRisk();
+  const a = assessReport(r);
+  const done = closingAction(r.id);
+  const kind = kindOf(r.species);
+  const kindText = kind === 'fagel' ? 'fågel' : kind === 'daggdjur' ? 'däggdjur' : 'okänt djur';
+  const raw = a.severity * 10 * a.zoneFactor * a.flock;
+  const otherZones = a.hits.filter((h) => h !== a.zone).map((h) => h.name);
+
+  $('risk-content').innerHTML = `
+    <div class="risk-head">
+      <div class="risk-score big ${done ? 'resolved' : ''}" style="--level:${a.level.color}">${a.score}<small>av 100</small></div>
+      <div>
+        <h3 style="color:${a.level.color}">${a.level.label} risk</h3>
+        <p><strong>Rekommenderad åtgärd:</strong> ${a.level.action}</p>
+      </div>
+    </div>
+    <div class="risk-status-line ${done ? 'resolved' : 'active'}">
+      ${done
+        ? `✅ Hanterad: ${RISK.ACTIONS[done.action].label} – ${escapeHtml(nameFor(done.created_by))}, ${formatDateTime(done.created_at)}`
+        : '🔴 Aktiv – risken finns kvar tills en åtgärd som skrämt bort, skrämselskott eller avlivat registrerats.'}
+    </div>
+
+    <h4 class="risk-section">Så räknades poängen</h4>
+    <table class="risk-table">
+      <tr><td>Djur: ${iconFor(r.species)} ${escapeHtml(r.species)} (${kindText})</td><td>${a.severity} / 10</td></tr>
+      <tr><td>Läge: ${escapeHtml(a.zone.name)}<br><small>${RISK.ZONES[a.zone.zone].label}${
+        otherZones.length ? ` · även: ${escapeHtml(otherZones.join(', '))}` : ''}</small></td><td>× ${a.zoneFactor}</td></tr>
+      <tr><td>Antal: ${r.animal_count} st</td><td>× ${a.flock}</td></tr>
+      <tr class="total"><td>${a.severity} × 10 × ${a.zoneFactor} × ${a.flock} = ${Math.round(raw)}${raw > 100 ? ' (max 100)' : ''}</td><td>${a.score}</td></tr>
+    </table>
+
+    <h4 class="risk-section">Rapporten</h4>
+    <p>${typeBadge(r) || '👁️ Observation'} · 🕒 ${formatDateTime(r.observed_at)} · 👤 ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
+    ${r.comment ? `<p>💬 ${escapeHtml(r.comment)}</p>` : ''}
+
+    <h4 class="risk-section">Åtgärdslogg</h4>
+    <ul class="action-log">${actionsFor(r.id).map((x) => `
+      <li>
+        <span>${RISK.ACTIONS[x.action]?.icon ?? ''} <strong>${RISK.ACTIONS[x.action]?.label ?? x.action}</strong>
+          ${x.comment ? ` – ${escapeHtml(x.comment)}` : ''}
+          <small>${escapeHtml(nameFor(x.created_by))} · ${formatDateTime(x.created_at)}</small></span>
+        ${x.created_by === currentUser?.id || isAdmin
+          ? `<button type="button" class="btn btn-danger" data-action-delete="${x.id}">Ta bort</button>` : ''}
+      </li>`).join('') || '<li><span class="hint">Inga åtgärder registrerade än.</span></li>'}
+    </ul>`;
+
+  // Knappar för att registrera åtgärd
+  const entries = Object.entries(RISK.ACTIONS);
+  const btn = ([key, x]) => `<button type="button" class="${x.closes ? 'closes' : ''}" data-register="${key}">${x.icon} ${x.label}</button>`;
+  $('action-grid').innerHTML =
+    '<div class="grid-title">Hanterar risken</div>' + entries.filter(([, x]) => x.closes).map(btn).join('') +
+    '<div class="grid-title">Loggas utan att stänga</div>' + entries.filter(([, x]) => !x.closes).map(btn).join('');
+}
+
+$('action-grid').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-register]');
+  if (!b || !openRiskId) return;
+  const action = b.dataset.register;
+  const comment = $('action-comment').value.trim() || null;
+  b.disabled = true;
+  const { error } = await db.from('report_actions').insert({ report_id: openRiskId, action, comment });
+  b.disabled = false;
+  if (error) {
+    $('risk-message').textContent = translateError(error);
+    return;
+  }
+  $('action-comment').value = '';
+  showToast(`${RISK.ACTIONS[action].label} registrerat`);
+  await loadReports();
+  renderRiskSheet();
+});
+
+$('risk-content').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-action-delete]');
+  if (!b || !confirm('Ta bort åtgärden?')) return;
+  const { error } = await db.from('report_actions').delete().eq('id', b.dataset.actionDelete);
+  if (error) {
+    $('risk-message').textContent = translateError(error);
+    return;
+  }
+  await loadReports();
+  renderRiskSheet();
+});
+
+$('risk-close').addEventListener('click', closeRisk);
+$('risk-show-map').addEventListener('click', () => {
+  const r = reports.find((x) => x.id === openRiskId);
+  closeRisk();
+  if (r) showOnMap(r);
+});
+
+// ---------- Riskzoner på kartan ----------
+
+function drawRiskZones() {
+  if (!riskLayer) return;
+  riskLayer.clearLayers();
+  for (const z of riskZones) {
+    const t = RISK.ZONE_TYPES[z.zone_type];
+    if (!t || !Array.isArray(z.points)) continue;
+    const opts = { color: t.color, interactive: false };
+    if (z.zone_type === 'runway' && z.points.length >= 2) {
+      const shapes = RISK.runwayShapes(z.points[0], z.points[z.points.length - 1]);
+      riskLayer.addLayer(L.polygon(shapes.approachA, { ...opts, weight: 1.5, dashArray: '6 6', fillOpacity: 0.08 }));
+      riskLayer.addLayer(L.polygon(shapes.approachB, { ...opts, weight: 1.5, dashArray: '6 6', fillOpacity: 0.08 }));
+      riskLayer.addLayer(L.polygon(shapes.strip, { ...opts, weight: 2, fillOpacity: 0.25 }));
+      riskLayer.addLayer(L.polyline(z.points, { ...opts, weight: 3 }));
+    } else if (z.zone_type === 'taxiway') {
+      riskLayer.addLayer(L.polyline(z.points, { ...opts, weight: 8, opacity: 0.45 }));
+    } else if (z.zone_type === 'airside') {
+      riskLayer.addLayer(L.polygon(z.points, { ...opts, weight: 3, fillOpacity: 0.05 }));
+    }
+  }
+}
+
+function renderZoneList() {
+  $('draw-start').hidden = !isAdmin;
+  $('zone-list').innerHTML = riskZones.map((z) => {
+    const t = RISK.ZONE_TYPES[z.zone_type] ?? { label: z.zone_type, color: '#999' };
+    return `<li>
+      <span><span class="zone-dot" style="background:${t.color}"></span><strong>${escapeHtml(z.name)}</strong>
+        <small style="color:var(--muted)"> · ${t.label}</small></span>
+      ${isAdmin ? `<button type="button" class="btn btn-danger" data-zone-delete="${z.id}">Ta bort</button>` : ''}
+    </li>`;
+  }).join('') || '<li><span class="hint">Inga zoner ritade än.</span></li>';
+}
+
+$('zone-list').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-zone-delete]');
+  if (!b) return;
+  const z = riskZones.find((x) => String(x.id) === b.dataset.zoneDelete);
+  if (!confirm(`Ta bort zonen "${z?.name}"? Riskpoängen räknas om direkt.`)) return;
+  const { error } = await db.from('risk_zones').delete().eq('id', b.dataset.zoneDelete);
+  if (error) {
+    showToast(translateError(error));
+    return;
+  }
+  showToast('Zonen är borttagen');
+  loadReports();
+});
+
+// ---------- Rita riskzon (admin) ----------
+
+let drawing = null;   // { type, points: [[lat, lng], …] } medan admin ritar
+
+function startDraw() {
+  closeSheet();
+  closeFilter();
+  closeRisk();
+  switchTab('map-view');
+  drawing = { type: 'runway', points: [] };
+  $('draw-name').value = '';
+  $('draw-message').textContent = '';
+  document.body.classList.add('drawing');
+  $('map-hint').textContent = 'Ritläge: tryck på kartan för att sätta punkter';
+  $('draw-panel').hidden = false;
+  // Snabba tryck ska bli punkter, inte zooma kartan
+  map.doubleClickZoom.disable();
+  updateDraw();
+  // Visa zonerna medan man ritar
+  if (riskLayer && !map.hasLayer(riskLayer)) riskLayer.addTo(map);
+}
+
+function endDraw() {
+  drawing = null;
+  document.body.classList.remove('drawing');
+  $('map-hint').textContent = 'Tryck på kartan där du såg djuret';
+  $('draw-panel').hidden = true;
+  map?.doubleClickZoom.enable();
+  if (drawPreview) { drawPreview.remove(); drawPreview = null; }
+}
+
+let drawPreview = null;
+
+function addDrawPoint(latlng) {
+  const pt = [Number(latlng.lat.toFixed(6)), Number(latlng.lng.toFixed(6))];
+  // En bana har bara två punkter (ändarna) – en tredje ersätter den andra
+  if (drawing.type === 'runway' && drawing.points.length >= 2) drawing.points[1] = pt;
+  else drawing.points.push(pt);
+  updateDraw();
+}
+
+function updateDraw() {
+  const t = RISK.ZONE_TYPES[drawing.type];
+  document.querySelectorAll('#draw-type [data-zone-type]').forEach((b) => {
+    b.classList.toggle('selected', b.dataset.zoneType === drawing.type);
+  });
+  const need = { runway: 2, taxiway: 2, airside: 3 }[drawing.type];
+  $('draw-hint').textContent = `${t.hint} (${drawing.points.length} ${drawing.points.length === 1 ? 'punkt' : 'punkter'}, minst ${need})`;
+
+  if (drawPreview) drawPreview.remove();
+  drawPreview = L.layerGroup().addTo(map);
+  const pts = drawing.points;
+  const opts = { color: t.color, interactive: false };
+  pts.forEach((p) => L.circleMarker(p, { ...opts, radius: 6, weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(drawPreview));
+  if (pts.length >= 2) {
+    if (drawing.type === 'airside' && pts.length >= 3) L.polygon(pts, { ...opts, weight: 3, fillOpacity: 0.1, dashArray: '6 4' }).addTo(drawPreview);
+    else L.polyline(pts, { ...opts, weight: 4, dashArray: '6 4' }).addTo(drawPreview);
+    if (drawing.type === 'runway') {
+      const shapes = RISK.runwayShapes(pts[0], pts[1]);
+      [shapes.strip, shapes.approachA, shapes.approachB].forEach((poly) =>
+        L.polygon(poly, { ...opts, weight: 1, dashArray: '4 4', fillOpacity: 0.08 }).addTo(drawPreview));
+    }
+  }
+}
+
+$('draw-start').addEventListener('click', startDraw);
+$('draw-name').addEventListener('input', () => { $('draw-message').textContent = ''; });
+$('draw-cancel').addEventListener('click', endDraw);
+$('draw-undo').addEventListener('click', () => {
+  drawing?.points.pop();
+  if (drawing) updateDraw();
+});
+$('draw-type').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-zone-type]');
+  if (!b || !drawing) return;
+  drawing.type = b.dataset.zoneType;
+  if (drawing.type === 'runway') drawing.points = drawing.points.slice(0, 2);
+  updateDraw();
+});
+$('draw-save').addEventListener('click', async () => {
+  const need = { runway: 2, taxiway: 2, airside: 3 }[drawing.type];
+  const name = $('draw-name').value.trim();
+  if (!name) { $('draw-message').textContent = 'Ge zonen ett namn, t.ex. "Bana 01L/19R".'; return; }
+  if (drawing.points.length < need) { $('draw-message').textContent = `Sätt minst ${need} punkter.`; return; }
+  const { error } = await db.from('risk_zones').insert({ name, zone_type: drawing.type, points: drawing.points });
+  if (error) { $('draw-message').textContent = translateError(error); return; }
+  showToast(`Zonen "${name}" är sparad`);
+  endDraw();
+  loadReports();
+});
+
 // ---------- Flikar ----------
 
 function switchTab(viewId) {
+  if (drawing && viewId !== 'map-view') endDraw();
   document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== viewId; });
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === viewId));
   if (viewId === 'map-view') {
@@ -1346,6 +1711,7 @@ document.addEventListener('click', (e) => {
   if (!report) return;
 
   if (button.dataset.action === 'show') showOnMap(report);
+  if (button.dataset.action === 'risk') openRisk(report);
   if (button.dataset.action === 'edit') startEdit(report);
   if (button.dataset.action === 'delete') deleteReport(report);
 });
@@ -1373,6 +1739,7 @@ function openSheet(report = null) {
   updateCategoryVisibility();
   closeSettings();
   closeFilter();
+  closeRisk();
   $('sheet').hidden = false;
   $('map-hint').hidden = true;
 }
