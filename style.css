@@ -972,3 +972,28 @@ main { flex: 1; position: relative; overflow: hidden; }
 @media (min-width: 800px) {
   .draw-panel { left: auto; width: 420px; right: 16px; }
 }
+
+/* ===== Riskinställningar ===== */
+.sheet-tall { max-height: 88vh; }
+.cfg-section { border: 1px solid var(--border-soft); border-radius: var(--radius); margin: 10px 0; background: var(--surface); }
+.cfg-section summary { padding: 10px 12px; font-weight: 700; cursor: pointer; list-style: none; display: flex; justify-content: space-between; }
+.cfg-section summary::-webkit-details-marker { display: none; }
+.cfg-section summary::after { content: '▾'; color: var(--muted); }
+.cfg-section[open] summary::after { content: '▴'; }
+.cfg-section .cfg-inner { padding: 0 12px 10px; }
+.cfg-section .hint { margin: 0 0 6px; }
+.cfg-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border-soft); font-size: 15px; }
+.cfg-row:last-child { border-bottom: none; }
+.cfg-row > .cfg-label { flex: 1; min-width: 0; }
+.cfg-row input { min-height: 38px !important; padding: 4px 8px !important; font-size: 15px !important; }
+.cfg-row input[type="number"] { width: 76px; flex: none; text-align: center; }
+.cfg-row input[type="text"] { flex: 1; min-width: 0; }
+.cfg-row .btn { min-height: 36px; padding: 0 10px; font-size: 14px; flex: none; }
+.cfg-head { display: flex; gap: 8px; font-size: 12px; color: var(--muted); padding: 2px 0; }
+.cfg-head span:first-child { flex: 1; }
+.cfg-head span { width: 76px; text-align: center; }
+.cfg-head span:first-child { text-align: left; }
+.cfg-level { flex-direction: column; align-items: stretch; }
+.cfg-level .cfg-line { display: flex; align-items: center; gap: 8px; }
+.cfg-level .cfg-line .cfg-label { flex: 1; font-weight: 700; }
+#riskcfg-sheet .sheet-buttons .btn { font-size: 15px; padding: 0 8px; }

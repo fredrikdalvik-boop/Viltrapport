@@ -58,11 +58,12 @@ window.RISK = {
   // En birdstrike har redan hänt och är alltid minst Hög risk (45 = gränsen för Hög).
   MIN_SCORE_BY_TYPE: {
     birdstrike: 45,
+    olycka: 0,
   },
 
   // ---------- Risken sjunker med tiden ----------
   // Varje gång så här många timmar gått sedan djuret sågs sjunker risken en nivå.
-  // Efter Låg blir observationen "inaktuell" och ingår inte längre i klassningen.
+  // Efter Låg blir observationen "inaktuell" och ingår inte längre i klassningen. 0 = av.
   DECAY_HOURS: 24,
 
   // ---------- Nivåer och rekommenderad åtgärd ----------
@@ -100,6 +101,75 @@ window.RISK = {
 
 (function () {
   const R = window.RISK;
+
+  // ---------- Inställningar som admin kan ändra i appen ----------
+  // Standardvärdena ovan sparas här. Ändringar från databasen (tabellen risk_config)
+  // läggs ovanpå med R.applyConfig(). Tom config = standard.
+  R.CONFIG_KEYS = [
+    'GROUP_SEVERITY', 'SPECIES_SEVERITY', 'ZONES', 'FLOCK', 'MIN_SCORE_BY_TYPE', 'DECAY_HOURS', 'LEVELS',
+    'RUNWAY_HALF_WIDTH', 'RUNWAY_END_EXTRA', 'APPROACH_LENGTH', 'APPROACH_SPREAD', 'TAXIWAY_HALF_WIDTH', 'NEAR_FENCE',
+  ];
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  R.DEFAULTS = clone(Object.fromEntries(R.CONFIG_KEYS.map((k) => [k, R[k]])));
+
+  const num = (v, min, max, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+  };
+
+  // Lägger en sparad config ovanpå standardvärdena. Felaktiga värden ignoreras.
+  R.applyConfig = function (cfg) {
+    const d = clone(R.DEFAULTS);
+    cfg = cfg && typeof cfg === 'object' ? cfg : {};
+
+    for (const [k, v] of Object.entries(cfg.GROUP_SEVERITY || {})) {
+      if (k in d.GROUP_SEVERITY) d.GROUP_SEVERITY[k] = num(v, 1, 10, d.GROUP_SEVERITY[k]);
+    }
+    if (cfg.SPECIES_SEVERITY && typeof cfg.SPECIES_SEVERITY === 'object') {
+      d.SPECIES_SEVERITY = {};
+      for (const [k, v] of Object.entries(cfg.SPECIES_SEVERITY)) {
+        const name = String(k).trim().slice(0, 100);
+        if (name) d.SPECIES_SEVERITY[name] = num(v, 1, 10, 5);
+      }
+    }
+    for (const [k, v] of Object.entries(cfg.ZONES || {})) {
+      if (!(k in d.ZONES) || !v) continue;
+      d.ZONES[k].bird = num(v.bird, 0, 1, d.ZONES[k].bird);
+      d.ZONES[k].mammal = num(v.mammal, 0, 1, d.ZONES[k].mammal);
+    }
+    if (Array.isArray(cfg.FLOCK) && cfg.FLOCK.length) {
+      const steps = cfg.FLOCK
+        .map((f) => ({ min: Math.round(num(f.min, 1, 100000, 1)), factor: num(f.factor, 0.1, 10, 1) }))
+        .sort((a, b) => b.min - a.min);
+      if (!steps.some((f) => f.min === 1)) steps.push({ min: 1, factor: 1 });
+      d.FLOCK = steps;
+    }
+    for (const [k, v] of Object.entries(cfg.MIN_SCORE_BY_TYPE || {})) {
+      if (k in d.MIN_SCORE_BY_TYPE) d.MIN_SCORE_BY_TYPE[k] = Math.round(num(v, 0, 100, d.MIN_SCORE_BY_TYPE[k]));
+    }
+    if ('DECAY_HOURS' in cfg) d.DECAY_HOURS = num(cfg.DECAY_HOURS, 0, 24 * 365, d.DECAY_HOURS);
+    if (Array.isArray(cfg.LEVELS)) {
+      for (const lv of d.LEVELS) {
+        const c = cfg.LEVELS.find((x) => x && x.key === lv.key);
+        if (!c) continue;
+        if (lv.key !== 'lag') lv.min = Math.round(num(c.min, 1, 100, lv.min));
+        if (typeof c.action === 'string' && c.action.trim()) lv.action = c.action.trim().slice(0, 200);
+      }
+      // Gränserna måste gå nedåt: Kritisk > Hög > Medel > Låg (0)
+      d.LEVELS.sort((a, b) => b.min - a.min);
+    }
+    const limits = {
+      RUNWAY_HALF_WIDTH: [10, 1000], RUNWAY_END_EXTRA: [0, 1000], APPROACH_LENGTH: [0, 20000],
+      APPROACH_SPREAD: [0, 1], TAXIWAY_HALF_WIDTH: [5, 500], NEAR_FENCE: [0, 5000],
+    };
+    for (const [k, [min, max]] of Object.entries(limits)) {
+      if (k in cfg) d[k] = num(cfg[k], min, max, d[k]);
+    }
+    for (const k of R.CONFIG_KEYS) R[k] = d[k];
+  };
+
+  // Nuvarande inställningar (t.ex. för att spara eller exportera)
+  R.currentConfig = () => clone(Object.fromEntries(R.CONFIG_KEYS.map((k) => [k, R[k]])));
 
   function projector(lat0, lng0) {
     const kx = Math.cos(lat0 * Math.PI / 180) * 111320;
@@ -235,7 +305,7 @@ window.RISK = {
 
     // Sänk en nivå per påbörjat dygn (DECAY_HOURS) sedan djuret sågs
     const ageHours = observedAt ? Math.max(0, ((now ?? Date.now()) - new Date(observedAt).getTime()) / 3600000) : 0;
-    const stepsDown = Math.floor(ageHours / R.DECAY_HOURS);
+    const stepsDown = R.DECAY_HOURS > 0 ? Math.floor(ageHours / R.DECAY_HOURS) : 0;
     const levelIndex = R.LEVELS.indexOf(baseLevel) + stepsDown;   // LEVELS går från högst till lägst
     const expired = levelIndex >= R.LEVELS.length;
     const level = expired ? R.LEVELS[R.LEVELS.length - 1] : R.LEVELS[levelIndex];

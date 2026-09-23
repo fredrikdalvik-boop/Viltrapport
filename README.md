@@ -19,8 +19,9 @@ sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
 5. **⚠️ Risk:** varje rapport får en riskpoäng 0–100 (Låg/Medel/Hög/Kritisk) utifrån djurets storlek,
    var det är (bana, inflygning, innanför stängsel …) och hur många. Tryck på en risk för att se varför
    och registrera åtgärd (t.ex. Skrämselskott). Risken ligger kvar tills en åtgärd registrerats.
-6. **Admin:** ritar banor, taxibanor och stängsel under ⚠️ Risk → **Rita ny zon**. Inställningarna för
-   poängen finns i `risk.js`.
+6. **Admin:** ritar banor, taxibanor och stängsel under ⚠️ Risk → **Rita ny zon**, och ändrar hur risken
+   räknas under ⚠️ Risk → **Ändra riskinställningar** (standardvärdena finns i `risk.js`).
+7. **Export:** ⚙️ → **Exportera till Excel** (allt eller det filtret visar).
 
 ## Installera på mobilen
 - **Android (Chrome):** meny ⋮ → *Lägg till på startskärmen* / *Installera app*.

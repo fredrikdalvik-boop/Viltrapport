@@ -99,6 +99,16 @@ create table if not exists public.report_actions (
 );
 create index if not exists report_actions_report_idx on public.report_actions (report_id);
 
+-- Riskinställningar som admin kan ändra i appen (en enda rad, id = 1).
+-- Tom config = standardvärdena i risk.js gäller.
+create table if not exists public.risk_config (
+  id         integer primary key default 1 check (id = 1),
+  config     jsonb not null default '{}'::jsonb check (jsonb_typeof(config) = 'object'),
+  updated_by uuid references auth.users (id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+insert into public.risk_config (id) values (1) on conflict (id) do nothing;
+
 -- Inställningar (t.ex. inbjudningskoden). Bara admins kan läsa.
 create table if not exists public.app_settings (
   key   text primary key,
@@ -185,6 +195,21 @@ begin
   return new;
 end;
 $$;
+
+-- Vem som senast ändrade riskinställningarna sätts av databasen
+create or replace function public.risk_config_stamp()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.updated_by := auth.uid();
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists risk_config_stamp on public.risk_config;
+create trigger risk_config_stamp
+  before update on public.risk_config
+  for each row execute function public.risk_config_stamp();
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
@@ -276,6 +301,7 @@ alter table public.custom_species enable row level security;
 alter table public.app_settings   enable row level security;
 alter table public.risk_zones     enable row level security;
 alter table public.report_actions enable row level security;
+alter table public.risk_config    enable row level security;
 
 -- Rapporter: medlemmar ser allt och skapar egna. Ägaren eller admin ändrar/tar bort.
 drop policy if exists "Inloggade kan läsa alla rapporter" on public.reports;
@@ -358,6 +384,18 @@ create policy "Admin tar bort riskzoner"
   on public.risk_zones for delete to authenticated
   using ((select public.is_admin()));
 
+-- Riskinställningar: alla medlemmar läser (behövs för att räkna risk), bara admin ändrar
+drop policy if exists "Medlemmar läser riskinställningar" on public.risk_config;
+create policy "Medlemmar läser riskinställningar"
+  on public.risk_config for select to authenticated
+  using ((select public.is_member()));
+
+drop policy if exists "Admin ändrar riskinställningar" on public.risk_config;
+create policy "Admin ändrar riskinställningar"
+  on public.risk_config for update to authenticated
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
+
 -- Åtgärder: medlemmar ser och registrerar. Man tar bort sina egna, admin allas.
 drop policy if exists "Medlemmar ser åtgärder" on public.report_actions;
 create policy "Medlemmar ser åtgärder"
@@ -387,9 +425,9 @@ create policy "Admin kan läsa inställningar"
 
 -- Den som inte är inloggad (anon) får ingen åtkomst alls
 revoke all on public.reports, public.profiles, public.custom_species, public.app_settings,
-             public.risk_zones, public.report_actions from anon;
+             public.risk_zones, public.report_actions, public.risk_config from anon;
 revoke all on public.reports, public.profiles, public.custom_species, public.app_settings,
-             public.risk_zones, public.report_actions from authenticated;
+             public.risk_zones, public.report_actions, public.risk_config from authenticated;
 
 grant select, insert, update, delete on public.reports to authenticated;
 grant select on public.profiles to authenticated;
@@ -397,6 +435,8 @@ grant update (color, full_name, updated_at) on public.profiles to authenticated;
 grant select, insert, delete on public.custom_species to authenticated;
 grant select on public.app_settings to authenticated;
 grant select, insert, update, delete on public.risk_zones to authenticated;
+grant select on public.risk_config to authenticated;
+grant update (config) on public.risk_config to authenticated;  -- bara inställningarna, vem/när sätts automatiskt
 grant select, delete on public.report_actions to authenticated;
 grant insert (report_id, action, comment) on public.report_actions to authenticated;  -- vem/när sätts automatiskt
 

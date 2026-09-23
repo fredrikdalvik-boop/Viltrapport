@@ -22,6 +22,7 @@ let isAdmin = false;          // är den inloggade admin?
 let riskZones = [];           // banor, taxibanor och stängsel (ritas av admin)
 let reportActions = [];       // åtgärder på rapporter (skrämt bort …)
 let riskLayer = null;         // kartlager som visar riskzonerna
+let riskConfigMeta = null;    // vem/när riskinställningarna senast ändrades
 
 // Färger man kan välja mellan
 const COLORS = [
@@ -252,9 +253,11 @@ $('color-picker').addEventListener('click', async (e) => {
 function openSettings() {
   closeSheet();
   closeRisk();
+  closeRiskConfig();
   closeFilter();
   $('user-email').textContent = (currentUser?.email ?? '') + (isAdmin ? ' (admin)' : '');
   $('settings-message').textContent = '';
+  $('export-message').textContent = '';
   const me = profiles.find((p) => p.user_id === currentUser?.id);
   $('my-name').value = me?.full_name ?? '';
   $('my-name-hint').hidden = Boolean(me?.full_name);
@@ -986,12 +989,13 @@ function popupHtml(r) {
 // ---------- Hämta rapporter ----------
 
 async function loadReports() {
-  const [reportsResult, profilesResult, speciesResult, zonesResult, actionsResult] = await Promise.all([
+  const [reportsResult, profilesResult, speciesResult, zonesResult, actionsResult, configResult] = await Promise.all([
     db.from('reports').select('*').order('observed_at', { ascending: false }).limit(5000),
     db.from('profiles').select('user_id, color, email, full_name, is_admin, is_member'),
     db.from('custom_species').select('id, name, category').order('name'),
     db.from('risk_zones').select('id, name, zone_type, points').order('zone_type').order('name'),
     db.from('report_actions').select('id, report_id, action, comment, created_by, created_at').order('created_at'),
+    db.from('risk_config').select('config, updated_by, updated_at').eq('id', 1).maybeSingle(),
   ]);
 
   if (reportsResult.error) {
@@ -1010,6 +1014,12 @@ async function loadReports() {
   else riskZones = zonesResult.data;
   if (actionsResult.error) console.warn('Åtgärder:', actionsResult.error.message);
   else reportActions = actionsResult.data;
+  // Riskinställningar från admin läggs ovanpå standardvärdena i risk.js
+  if (configResult.error) console.warn('Riskinställningar:', configResult.error.message);
+  else {
+    RISK.applyConfig(configResult.data?.config);
+    riskConfigMeta = configResult.data;
+  }
   drawRiskZones();
 
   reports = reportsResult.data;
@@ -1203,6 +1213,7 @@ $('filter-riskzones').addEventListener('click', (e) => {
 function openFilter() {
   closeSheet();
   closeRisk();
+  closeRiskConfig();
   syncRiskZoneToggle();
   closeSettings();
   updateFilterOptions();
@@ -1465,6 +1476,7 @@ $('risk-status').addEventListener('click', (e) => {
 // ---------- Riskrapport för en rapport ----------
 
 function openRisk(report) {
+  closeRiskConfig();
   closeSheet();
   closeFilter();
   closeSettings();
@@ -1585,6 +1597,368 @@ $('risk-show-map').addEventListener('click', () => {
   if (r) showOnMap(r);
 });
 
+// ---------- Riskinställningar (admin) ----------
+// Alla kan se hur risken räknas. Admin kan ändra och spara (tabellen risk_config).
+
+function openRiskConfig() {
+  closeRisk();
+  closeFilter();
+  closeSheet();
+  $('riskcfg-message').textContent = '';
+  $('riskcfg-title').textContent = isAdmin ? 'Riskinställningar' : 'Så räknas risken';
+  $('riskcfg-save').hidden = !isAdmin;
+  $('riskcfg-reset').hidden = !isAdmin;
+  $('riskcfg-cancel').textContent = isAdmin ? 'Avbryt' : 'Stäng';
+  $('riskcfg-meta').textContent = riskConfigMeta?.updated_by
+    ? `Senast ändrad av ${nameFor(riskConfigMeta.updated_by)}, ${formatDateTime(riskConfigMeta.updated_at)}.`
+    : 'Standardinställningar används.';
+  $('species-datalist').innerHTML = [...speciesIndex().values()].map((sp) => `<option value="${escapeHtml(sp.name)}">`).join('');
+  renderRiskConfigForm(RISK.currentConfig());
+  $('riskcfg-sheet').hidden = false;
+  $('riskcfg-sheet').scrollTop = 0;
+}
+
+function closeRiskConfig() {
+  $('riskcfg-sheet').hidden = true;
+}
+
+// Bygger formuläret från en config
+function renderRiskConfigForm(c) {
+  const ro = isAdmin ? '' : 'disabled';
+  const n = (attrs, value, step = 1, min = 0, max = 100) =>
+    `<input type="number" inputmode="decimal" ${attrs} value="${value}" step="${step}" min="${min}" max="${max}" ${ro}>`;
+  const section = (title, hint, inner, open = false) => `
+    <details class="cfg-section" ${open ? 'open' : ''}>
+      <summary>${title}</summary>
+      <div class="cfg-inner">${hint ? `<p class="hint">${hint}</p>` : ''}${inner}</div>
+    </details>`;
+
+  const groups = Object.entries(window.SPECIES_GROUPS).map(([key, g]) => `
+    <div class="cfg-row"><span class="cfg-label">${g.icon} ${escapeHtml(g.label)}</span>
+      ${n(`data-group="${key}"`, c.GROUP_SEVERITY[key] ?? 5, 1, 1, 10)}</div>`).join('');
+
+  const speciesRow = (name, value) => `
+    <div class="cfg-row" data-species-row>
+      <input type="text" list="species-datalist" value="${escapeHtml(name)}" placeholder="Art" maxlength="100" ${ro}>
+      ${n('data-species-value', value, 1, 1, 10)}
+      ${isAdmin ? '<button type="button" class="btn btn-danger" data-species-remove>✕</button>' : ''}
+    </div>`;
+  const species = Object.entries(c.SPECIES_SEVERITY).map(([k, v]) => speciesRow(k, v)).join('') +
+    (isAdmin ? '<button type="button" class="btn btn-secondary btn-block" id="cfg-add-species">+ Lägg till art</button>' : '');
+
+  const zones = '<div class="cfg-head"><span>Läge</span><span>Fågel</span><span>Däggdjur</span></div>' +
+    Object.entries(c.ZONES).map(([key, z]) => `
+    <div class="cfg-row"><span class="cfg-label">${escapeHtml(RISK.ZONES[key]?.label ?? key)}</span>
+      ${n(`data-zone="${key}" data-kind="bird"`, z.bird, 0.05, 0, 1)}
+      ${n(`data-zone="${key}" data-kind="mammal"`, z.mammal, 0.05, 0, 1)}</div>`).join('');
+
+  const steps = c.FLOCK.filter((f) => f.min > 1).sort((a, b) => a.min - b.min);
+  while (steps.length < 4) steps.push({ min: '', factor: '' });
+  const flock = '<div class="cfg-head"><span>Från antal djur</span><span>Antal</span><span>Faktor</span></div>' +
+    '<div class="cfg-row"><span class="cfg-label">1 djur</span><input type="number" value="1" disabled><input type="number" value="1" disabled></div>' +
+    steps.map((f, i) => `
+    <div class="cfg-row"><span class="cfg-label">Steg ${i + 1}</span>
+      ${n(`data-flock-min="${i}"`, f.min, 1, 2, 100000)}
+      ${n(`data-flock-factor="${i}"`, f.factor, 0.1, 0.1, 10)}</div>`).join('');
+
+  const levels = c.LEVELS.map((l) => `
+    <div class="cfg-row cfg-level">
+      <div class="cfg-line"><span class="cfg-label" style="color:${l.color}">● ${l.label}</span>
+        ${l.key === 'lag' ? '<span class="hint">från 0</span>' : `<span class="hint">från</span>${n(`data-level-min="${l.key}"`, l.min, 1, 1, 100)}`}</div>
+      <input type="text" data-level-action="${l.key}" value="${escapeHtml(l.action)}" maxlength="200" placeholder="Rekommenderad åtgärd" ${ro}>
+    </div>`).join('');
+
+  const types = Object.entries(c.MIN_SCORE_BY_TYPE).map(([key, v]) => `
+    <div class="cfg-row"><span class="cfg-label">${REPORT_TYPES[key]?.label ?? key} är alltid minst</span>
+      ${n(`data-min-type="${key}"`, v, 1, 0, 100)}</div>`).join('');
+
+  const dist = [
+    ['APPROACH_LENGTH', 'In-/utflygning ut från banände (m)', 100, 0, 20000],
+    ['RUNWAY_HALF_WIDTH', 'Banområde på var sida om mittlinjen (m)', 10, 10, 1000],
+    ['RUNWAY_END_EXTRA', 'Banområde förbi banänden (m)', 10, 0, 1000],
+    ['APPROACH_SPREAD', 'Inflygningen vidgas per meter (0,15 = 15 %)', 0.01, 0, 1],
+    ['TAXIWAY_HALF_WIDTH', 'Taxibana på var sida om mittlinjen (m)', 5, 5, 500],
+    ['NEAR_FENCE', '"Nära stängslet" inom (m)', 50, 0, 5000],
+  ].map(([key, label, step, min, max]) => `
+    <div class="cfg-row"><span class="cfg-label">${label}</span>${n(`data-dist="${key}"`, c[key], step, min, max)}</div>`).join('');
+
+  $('riskcfg-body').innerHTML =
+    `<p class="hint">Poäng = djurets vikt × 10 × lägesfaktor × flockfaktor (max 100). Sedan sänks nivån med tiden.</p>` +
+    section('🐾 Djurens vikt (1–10)', 'Standard per djurgrupp. Minsta fågel = 1, älg = 10.', groups, true) +
+    section('🎯 Enskilda arter', 'Arter som ska ha en annan vikt än sin grupp.', species) +
+    section('📍 Läge (faktor 0–1)', 'Hur farligt läget är. Den högsta zonen djuret befinner sig i gäller.', zones) +
+    section('🐦‍⬛ Flock', 'Fler djur ger högre risk. Lämna tomt för att ta bort ett steg.', flock) +
+    section('🚦 Nivåer och åtgärder', 'Gränserna måste vara Kritisk > Hög > Medel.', levels) +
+    section('✈️ Rapporttyp', 'Lägsta poäng oavsett uträkning (0 = ingen).', types) +
+    section('⏳ Nedtrappning', 'Risken sjunker en nivå per så här många timmar. 0 = ingen nedtrappning.',
+      `<div class="cfg-row"><span class="cfg-label">Timmar per nivå</span>${n('data-decay', c.DECAY_HOURS, 1, 0, 8760)}</div>`) +
+    section('📏 Avstånd för zonerna', '', dist);
+}
+
+// Läser formuläret till en config. Kastar ett fel med förklaring om något är fel.
+function collectRiskConfig() {
+  const body = $('riskcfg-body');
+  const val = (sel) => body.querySelector(sel)?.value;
+  const cfg = RISK.currentConfig();
+
+  body.querySelectorAll('[data-group]').forEach((el) => { cfg.GROUP_SEVERITY[el.dataset.group] = Number(el.value); });
+
+  cfg.SPECIES_SEVERITY = {};
+  body.querySelectorAll('[data-species-row]').forEach((row) => {
+    const name = row.querySelector('input[type="text"]').value.trim();
+    if (name) cfg.SPECIES_SEVERITY[name] = Number(row.querySelector('[data-species-value]').value);
+  });
+
+  body.querySelectorAll('[data-zone]').forEach((el) => { cfg.ZONES[el.dataset.zone][el.dataset.kind] = Number(el.value); });
+
+  cfg.FLOCK = [{ min: 1, factor: 1 }];
+  for (let i = 0; i < 4; i++) {
+    const min = val(`[data-flock-min="${i}"]`);
+    const factor = val(`[data-flock-factor="${i}"]`);
+    if (min === '' && factor === '') continue;
+    if (!(Number(min) >= 2) || !(Number(factor) > 0)) throw new Error(`Flock steg ${i + 1}: fyll i antal (minst 2) och faktor.`);
+    cfg.FLOCK.push({ min: Number(min), factor: Number(factor) });
+  }
+
+  for (const l of cfg.LEVELS) {
+    if (l.key !== 'lag') l.min = Number(val(`[data-level-min="${l.key}"]`));
+    l.action = val(`[data-level-action="${l.key}"]`) || l.action;
+  }
+  const lv = Object.fromEntries(cfg.LEVELS.map((l) => [l.key, l.min]));
+  if (!(lv.kritisk > lv.hog && lv.hog > lv.medel && lv.medel > 0)) {
+    throw new Error('Nivågränserna måste vara Kritisk > Hög > Medel > 0.');
+  }
+
+  body.querySelectorAll('[data-min-type]').forEach((el) => { cfg.MIN_SCORE_BY_TYPE[el.dataset.minType] = Number(el.value); });
+  cfg.DECAY_HOURS = Number(val('[data-decay]'));
+  body.querySelectorAll('[data-dist]').forEach((el) => { cfg[el.dataset.dist] = Number(el.value); });
+
+  for (const [k, v] of Object.entries(cfg)) {
+    if (typeof v === 'number' && !Number.isFinite(v)) throw new Error(`Ogiltigt värde: ${k}`);
+  }
+  return cfg;
+}
+
+$('riskcfg-open').addEventListener('click', openRiskConfig);
+$('riskcfg-cancel').addEventListener('click', closeRiskConfig);
+
+$('riskcfg-body').addEventListener('click', (e) => {
+  if (e.target.id === 'cfg-add-species') {
+    e.target.insertAdjacentHTML('beforebegin', `
+      <div class="cfg-row" data-species-row>
+        <input type="text" list="species-datalist" placeholder="Art" maxlength="100">
+        <input type="number" inputmode="decimal" data-species-value value="5" step="1" min="1" max="10">
+        <button type="button" class="btn btn-danger" data-species-remove>✕</button>
+      </div>`);
+    e.target.previousElementSibling.querySelector('input').focus();
+  }
+  const remove = e.target.closest('[data-species-remove]');
+  if (remove) remove.closest('[data-species-row]').remove();
+});
+
+async function saveRiskConfig(config, successText) {
+  const { error } = await db.from('risk_config').update({ config }).eq('id', 1);
+  if (error) {
+    $('riskcfg-message').textContent = translateError(error);
+    return false;
+  }
+  showToast(successText);
+  closeRiskConfig();
+  await loadReports();
+  return true;
+}
+
+$('riskcfg-save').addEventListener('click', async () => {
+  $('riskcfg-message').textContent = '';
+  let cfg;
+  try {
+    cfg = collectRiskConfig();
+  } catch (err) {
+    $('riskcfg-message').textContent = err.message;
+    return;
+  }
+  // Kör igenom samma kontroll som när den läses in, så att det sparade alltid är giltigt
+  RISK.applyConfig(cfg);
+  await saveRiskConfig(RISK.currentConfig(), 'Riskinställningarna är sparade – poängen räknas om');
+});
+
+$('riskcfg-reset').addEventListener('click', async () => {
+  if (!confirm('Återställa alla riskinställningar till standard?')) return;
+  await saveRiskConfig({}, 'Standardinställningarna gäller igen');
+});
+
+// ---------- Export till Excel ----------
+// Använder biblioteket SheetJS (laddas bara när man exporterar).
+
+const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${url}"]`)) return resolve();
+    const el = document.createElement('script');
+    el.src = url;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error('Kunde inte ladda Excel-biblioteket. Kontrollera uppkopplingen.'));
+    document.head.appendChild(el);
+  });
+}
+
+// Ett ark från rader (objekt) med kolumnbredder och filter på rubrikraden
+function makeSheet(rows, widths) {
+  const ws = XLSX.utils.json_to_sheet(rows, { cellDates: true, dateNF: 'yyyy-mm-dd hh:mm' });
+  // Datum visas som "2026-09-23 10:05" i Excel
+  for (const cell of Object.values(ws)) {
+    if (cell && cell.v instanceof Date) cell.z = 'yyyy-mm-dd hh:mm';
+  }
+  const headers = Object.keys(rows[0] ?? {});
+  ws['!cols'] = headers.map((h) => ({ wch: widths?.[h] ?? Math.max(10, Math.min(40, h.length + 2)) }));
+  if (rows.length) ws['!autofilter'] = { ref: ws['!ref'] };
+  return ws;
+}
+
+// Datum till Excel (tomt om det saknas)
+const xlDate = (value) => (value ? new Date(value) : '');
+
+async function exportExcel(onlyFiltered) {
+  const message = $('export-message');
+  message.className = 'message';
+  message.textContent = 'Skapar Excel-filen …';
+  try {
+    await loadScript(XLSX_URL);
+  } catch (err) {
+    message.textContent = err.message;
+    return;
+  }
+  const list = onlyFiltered ? getFilteredReports() : [...reports].sort((a, b) => new Date(b.observed_at) - new Date(a.observed_at));
+  const now = new Date();
+  const kindText = { fagel: 'Fågel', daggdjur: 'Däggdjur', annat: 'Annat' };
+
+  // Rapporter med riskdata
+  const reportRows = list.map((r) => {
+    const a = assessReport(r);
+    const done = closingAction(r.id);
+    const group = window.SPECIES_GROUPS[groupOf(r.species)];
+    const status = done ? 'Hanterad' : a.expired ? 'Inaktuell' : 'Aktiv';
+    return {
+      'ID': r.id,
+      'Typ': REPORT_TYPES[typeOf(r)].label,
+      'Sedd': xlDate(r.observed_at),
+      'Djurslag': r.species,
+      'Djurgrupp': group ? group.label : 'Annat',
+      'Fågel/däggdjur': kindText[kindOf(r.species)] ?? '',
+      'Antal': r.animal_count,
+      'Rapportör': nameFor(r.user_id, r.reporter_email),
+      'Rapportörens e-post': r.reporter_email,
+      'Kommentar': r.comment ?? '',
+      'Latitud': r.lat,
+      'Longitud': r.lng,
+      'Zon': a.zone.name,
+      'Läge': RISK.ZONES[a.zone.zone]?.label ?? '',
+      'Djurets vikt (1-10)': a.severity,
+      'Lägesfaktor': a.zoneFactor,
+      'Flockfaktor': a.flock,
+      'Uträknad poäng': a.calculated,
+      'Grundpoäng': a.baseScore,
+      'Grundnivå': a.baseLevel.label,
+      'Ålder (timmar)': Math.round(a.ageHours),
+      'Sänkta nivåer': a.stepsDown,
+      'Aktuell poäng': a.expired ? '' : a.score,
+      'Aktuell nivå': a.expired ? 'Inaktuell' : a.level.label,
+      'Status': status,
+      'Hanterad med': done ? RISK.ACTIONS[done.action]?.label ?? done.action : '',
+      'Hanterad av': done ? nameFor(done.created_by) : '',
+      'Hanterad': done ? xlDate(done.created_at) : '',
+      'Antal åtgärder': actionsFor(r.id).length,
+      'Registrerad': xlDate(r.created_at),
+      'Senast ändrad': xlDate(r.updated_at),
+      'Karta': `https://www.google.com/maps?q=${r.lat},${r.lng}`,
+    };
+  });
+
+  // Åtgärder
+  const ids = new Set(list.map((r) => r.id));
+  const actionRows = reportActions.filter((x) => ids.has(x.report_id)).map((x) => {
+    const r = reports.find((y) => y.id === x.report_id);
+    return {
+      'Rapport-ID': x.report_id,
+      'Djurslag': r?.species ?? '',
+      'Rapporttyp': r ? REPORT_TYPES[typeOf(r)].label : '',
+      'Sedd': r ? xlDate(r.observed_at) : '',
+      'Åtgärd': RISK.ACTIONS[x.action]?.label ?? x.action,
+      'Hanterar risken': RISK.ACTIONS[x.action]?.closes ? 'Ja' : 'Nej',
+      'Kommentar': x.comment ?? '',
+      'Registrerad av': nameFor(x.created_by),
+      'Tid': xlDate(x.created_at),
+    };
+  });
+
+  // Riskzoner
+  const zoneRows = riskZones.map((z) => ({
+    'Namn': z.name,
+    'Typ': RISK.ZONE_TYPES[z.zone_type]?.label ?? z.zone_type,
+    'Antal punkter': z.points.length,
+    'Koordinater (lat, lng)': z.points.map((p) => p.join(', ')).join(' | '),
+  }));
+
+  // Sammanfattning
+  const count = (fn) => reportRows.filter(fn).length;
+  const summaryRows = [
+    { 'Uppgift': 'Exporterad', 'Värde': now },
+    { 'Uppgift': 'Exporterad av', 'Värde': nameFor(currentUser.id, currentUser.email) },
+    { 'Uppgift': 'Urval', 'Värde': onlyFiltered ? 'Det filtret visar' : 'Allt' },
+    { 'Uppgift': 'Antal rapporter', 'Värde': reportRows.length },
+    ...Object.values(REPORT_TYPES).map((t) => ({ 'Uppgift': `Typ: ${t.label}`, 'Värde': count((x) => x['Typ'] === t.label) })),
+    ...['Aktiv', 'Hanterad', 'Inaktuell'].map((st) => ({ 'Uppgift': `Status: ${st}`, 'Värde': count((x) => x['Status'] === st) })),
+    ...RISK.LEVELS.map((l) => ({ 'Uppgift': `Aktiva med nivå ${l.label}`, 'Värde': count((x) => x['Status'] === 'Aktiv' && x['Aktuell nivå'] === l.label) })),
+    { 'Uppgift': 'Antal djur totalt', 'Värde': reportRows.reduce((sum, x) => sum + x['Antal'], 0) },
+    { 'Uppgift': 'Antal åtgärder', 'Värde': actionRows.length },
+  ];
+  // Vanligaste arterna
+  const bySpecies = {};
+  for (const x of reportRows) {
+    bySpecies[x['Djurslag']] ??= { rapporter: 0, djur: 0 };
+    bySpecies[x['Djurslag']].rapporter += 1;
+    bySpecies[x['Djurslag']].djur += x['Antal'];
+  }
+  const speciesRows = Object.entries(bySpecies)
+    .sort((a, b) => b[1].rapporter - a[1].rapporter)
+    .map(([name, v]) => ({ 'Djurslag': name, 'Antal rapporter': v.rapporter, 'Antal djur': v.djur }));
+
+  // Inställningarna som gällde
+  const c = RISK.currentConfig();
+  const settingsRows = [
+    ...Object.entries(c.GROUP_SEVERITY).map(([k, v]) => ({ 'Inställning': `Vikt: ${window.SPECIES_GROUPS[k]?.label ?? k}`, 'Värde': v })),
+    ...Object.entries(c.SPECIES_SEVERITY).map(([k, v]) => ({ 'Inställning': `Vikt (art): ${k}`, 'Värde': v })),
+    ...Object.entries(c.ZONES).flatMap(([k, z]) => [
+      { 'Inställning': `Läge fågel: ${RISK.ZONES[k]?.label ?? k}`, 'Värde': z.bird },
+      { 'Inställning': `Läge däggdjur: ${RISK.ZONES[k]?.label ?? k}`, 'Värde': z.mammal }]),
+    ...c.FLOCK.map((f) => ({ 'Inställning': `Flock från ${f.min} djur`, 'Värde': f.factor })),
+    ...c.LEVELS.map((l) => ({ 'Inställning': `Nivå ${l.label} från`, 'Värde': l.min, 'Åtgärd': l.action })),
+    ...Object.entries(c.MIN_SCORE_BY_TYPE).map(([k, v]) => ({ 'Inställning': `Lägsta poäng: ${REPORT_TYPES[k]?.label ?? k}`, 'Värde': v })),
+    { 'Inställning': 'Nedtrappning (timmar per nivå)', 'Värde': c.DECAY_HOURS },
+    { 'Inställning': 'In-/utflygning (m)', 'Värde': c.APPROACH_LENGTH },
+    { 'Inställning': 'Banområde halv bredd (m)', 'Värde': c.RUNWAY_HALF_WIDTH },
+    { 'Inställning': 'Taxibana halv bredd (m)', 'Värde': c.TAXIWAY_HALF_WIDTH },
+    { 'Inställning': 'Nära stängslet (m)', 'Värde': c.NEAR_FENCE },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, makeSheet(reportRows, { 'Sedd': 17, 'Kommentar': 40, 'Zon': 26, 'Karta': 45, 'Registrerad': 17, 'Senast ändrad': 17, 'Hanterad': 17 }), 'Rapporter');
+  XLSX.utils.book_append_sheet(wb, makeSheet(actionRows.length ? actionRows : [{ 'Info': 'Inga åtgärder' }], { 'Sedd': 17, 'Tid': 17, 'Kommentar': 40 }), 'Åtgärder');
+  XLSX.utils.book_append_sheet(wb, makeSheet(summaryRows, { 'Uppgift': 32, 'Värde': 22 }), 'Sammanfattning');
+  XLSX.utils.book_append_sheet(wb, makeSheet(speciesRows.length ? speciesRows : [{ 'Info': 'Inga rapporter' }], { 'Djurslag': 28 }), 'Per djurslag');
+  XLSX.utils.book_append_sheet(wb, makeSheet(zoneRows.length ? zoneRows : [{ 'Info': 'Inga riskzoner ritade' }], { 'Namn': 24, 'Koordinater (lat, lng)': 80 }), 'Riskzoner');
+  XLSX.utils.book_append_sheet(wb, makeSheet(settingsRows, { 'Inställning': 44, 'Åtgärd': 40 }), 'Riskinställningar');
+
+  const file = `viltrapport-${localDate(now)}${onlyFiltered ? '-urval' : ''}.xlsx`;
+  XLSX.writeFile(wb, file, { compression: true });
+  message.className = 'message ok';
+  message.textContent = `✅ ${file} är nedladdad (${reportRows.length} rapporter).`;
+}
+
+$('export-all').addEventListener('click', () => exportExcel(false));
+$('export-filtered').addEventListener('click', () => exportExcel(true));
+
 // ---------- Riskzoner på kartan ----------
 
 function drawRiskZones() {
@@ -1610,6 +1984,7 @@ function drawRiskZones() {
 
 function renderZoneList() {
   $('draw-start').hidden = !isAdmin;
+  $('riskcfg-open').textContent = isAdmin ? '⚙️ Ändra riskinställningar' : '📋 Visa riskinställningar';
   $('zone-list').innerHTML = riskZones.map((z) => {
     const t = RISK.ZONE_TYPES[z.zone_type] ?? { label: z.zone_type, color: '#999' };
     return `<li>

@@ -92,7 +92,15 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Åtgärder i `report_actions (report_id, action, comment, created_by, created_at)`. `RISK.ACTIONS[x].closes` = hanterar risken
   (skrämt bort, skrämselskott, avlivat, kunde inte bekräfta, borta vid kontroll). Risken sjunker inte av tid – bara av åtgärd.
 - Fliken "⚠️ Risk" (`#risk-view`): sammanfattning, Aktiva/Hanterade/Alla, lista sorterad på poäng, zonlista. Riskrapport i `#risk-sheet`.
+- **Riskinställningar i appen:** tabellen `risk_config` (en rad, id = 1, `config jsonb`). Alla medlemmar läser, admin uppdaterar (`update (config)`); trigger sätter `updated_by/updated_at`.
+  `RISK.DEFAULTS` = standardvärdena i risk.js; `RISK.applyConfig(cfg)` lägger sparad config ovanpå (validerar/begränsar värden); `RISK.currentConfig()`.
+  Redigerbara nycklar: `RISK.CONFIG_KEYS`. Panelen `#riskcfg-sheet` (Risk-fliken → "Ändra/Visa riskinställningar"). Tom config `{}` = standard ("Återställ").
 - Riskzonerna är ett eget lager på kartan ("⚠️ Riskzoner"), kan också slås av/på i filterpanelen (`#filter-riskzones`, sparas i `layerPrefs.risk`).
+
+## Export till Excel
+- ⚙️ → "Exportera till Excel": Allt eller det filtret visar. SheetJS (`xlsx@0.18.5` från jsdelivr) laddas först vid export (`loadScript`).
+- Flikar: Rapporter (32 kolumner inkl. riskdata, status, kartlänk), Åtgärder, Sammanfattning, Per djurslag, Riskzoner, Riskinställningar.
+- Datum skrivs som Excel-datum (`yyyy-mm-dd hh:mm`, webbläsarens lokala tid). Saknade värden blir tomma (`xlDate`).
 
 ## Rapporttyper
 - `REPORT_TYPES` i app.js. Väljs överst i formuläret (`#type-picker`). Vid olycka/birdstrike heter fältet "Viltslag".
