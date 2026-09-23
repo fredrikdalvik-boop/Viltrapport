@@ -278,6 +278,31 @@ $('my-name-save').addEventListener('click', async () => {
   openSettings();
 });
 
+// ---------- Tema (ljust/mörkt) ----------
+// 'auto' = följ telefonens inställning. Valet sparas i webbläsaren.
+
+const THEME_KEY = 'viltrapport-theme';
+
+function getTheme() {
+  try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch { return 'auto'; }
+}
+
+function applyTheme(choice) {
+  if (choice === 'light' || choice === 'dark') document.documentElement.dataset.theme = choice;
+  else delete document.documentElement.dataset.theme;
+  document.querySelectorAll('#theme-picker [data-theme-choice]').forEach((b) => {
+    b.classList.toggle('selected', b.dataset.themeChoice === choice);
+  });
+}
+
+$('theme-picker').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-theme-choice]');
+  if (!b) return;
+  try { localStorage.setItem(THEME_KEY, b.dataset.themeChoice); } catch { /* privat läge m.m. */ }
+  applyTheme(b.dataset.themeChoice);
+});
+applyTheme(getTheme());
+
 // ---------- Admin ----------
 
 async function renderAdmin() {
@@ -393,10 +418,12 @@ $('settings-close').addEventListener('click', closeSettings);
 // Fyller i namnet från CONFIG.APP_NAME överallt där det står data-app-name="…"
 function applyAppName() {
   const n = CONFIG.APP_NAME;
-  const full = `${n.line1} ${n.line2}${n.line3}`;
+  const rest = `${n.line2}${n.line3}`;
+  const full = `${n.line1} ${rest}`;
   document.title = full;
   document.querySelectorAll('[data-app-name]').forEach((el) => {
-    el.textContent = el.dataset.appName === 'full' ? full : n[el.dataset.appName];
+    const key = el.dataset.appName;
+    el.textContent = key === 'full' ? full : key === 'rest' ? rest : n[key];
   });
 }
 applyAppName();
@@ -711,6 +738,7 @@ function initMap() {
 
   const streets = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
+    className: 'tiles-streets',  // görs mörk i mörkt tema (se style.css)
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-bidragsgivare',
   });
   const satellite = L.tileLayer(

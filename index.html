@@ -5,7 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Charlies mega-ultra-viltrapport-app</title>
   <meta name="description" content="Rapportera vilt på flygplatsen">
-  <meta name="theme-color" content="#101218">
+  <meta name="theme-color" content="#14161c">
+  <script>
+    // Välj tema direkt (innan sidan ritas) så att den inte blinkar till i fel färg
+    try {
+      var t = localStorage.getItem('viltrapport-theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -17,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
 
@@ -25,7 +32,7 @@
   <section id="auth-view" class="auth-view" hidden>
     <div class="auth-col">
       <div class="hero">
-        <img class="hero-img" src="icons/hero-scene.svg?v=11"
+        <img class="hero-img" src="icons/hero-scene.svg?v=12"
              alt="Två jägare med gevär på ryggen går med en labrador och en beagle i granskogen i solnedgången">
         <div class="hero-scrim"></div>
         <!-- Appens namn fylls i från CONFIG.APP_NAME i config.js -->
@@ -152,8 +159,33 @@
   <!-- ===== Själva appen ===== -->
   <div id="app-view" hidden>
     <header class="topbar">
-      <span class="topbar-title" data-app-name="full">Charlies mega-ultra-viltrapport-app</span>
-      <button id="settings-btn" class="btn btn-small" aria-label="Inställningar">⚙️</button>
+      <div class="brand">
+        <span class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 32 32">
+            <defs>
+              <linearGradient id="brandSky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#2a2548"/>
+                <stop offset=".6" stop-color="#b8603f"/>
+                <stop offset="1" stop-color="#e39a5a"/>
+              </linearGradient>
+            </defs>
+            <rect width="32" height="32" fill="url(#brandSky)"/>
+            <circle cx="20" cy="21" r="6.5" fill="#ffd79a"/>
+            <path d="M10 6 L14.5 13 H12.5 L16 19 H13.5 L17 25 H3 L6.5 19 H4 L7.5 13 H5.5 Z" fill="#101218"/>
+            <path d="M0 25 Q16 22 32 25 V32 H0 Z" fill="#101218"/>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-kicker" data-app-name="line1">Charlies</span>
+          <span class="brand-name" data-app-name="rest">mega-ultra-viltrapport-app</span>
+        </span>
+      </div>
+      <button id="settings-btn" class="icon-btn" aria-label="Inställningar" title="Inställningar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
     </header>
 
     <div id="offline-banner" class="banner" hidden>Ingen uppkoppling – rapporter kan inte sparas just nu.</div>
@@ -296,6 +328,13 @@
       <button type="button" id="my-name-save" class="btn btn-secondary">Spara</button>
     </div>
 
+    <label>Tema</label>
+    <div class="segmented" id="theme-picker">
+      <button type="button" data-theme-choice="auto">📱 Auto</button>
+      <button type="button" data-theme-choice="light">☀️ Ljust</button>
+      <button type="button" data-theme-choice="dark">🌙 Mörkt</button>
+    </div>
+
     <label>Min färg på kartan</label>
     <div id="color-picker" class="color-picker"></div>
     <p id="settings-message" class="message" role="alert"></p>
@@ -328,8 +367,8 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=11"></script>
-  <script src="species.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <script src="config.js?v=12"></script>
+  <script src="species.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>

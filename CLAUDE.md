@@ -42,6 +42,14 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   inloggades JWT vid insert och låser dem vid update. Appen skickar dem aldrig.
 - RLS är på. Medlemmar (`is_member()`): select alla, insert egna. Update/delete: ägaren eller admin (`is_admin()`). `anon`: ingen åtkomst.
 
+## Tema och utseende
+- Ljust/mörkt tema med CSS-variabler i `style.css` (`--bg`, `--surface`, `--text`, `--muted`, `--border`, `--green`/`--green-ink`/`--green-light`, …).
+  Mörka värden finns två gånger: `:root[data-theme="dark"]` och `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])` – ändra båda.
+- Val under ⚙️ (Auto/Ljust/Mörkt) sparas i `localStorage` (`viltrapport-theme`). Ett litet skript i `<head>` sätter `data-theme` innan sidan ritas.
+- Vanliga kartan (`className: 'tiles-streets'`) inverteras i mörkt tema; satellit lämnas orörd.
+- Toppen (`.topbar`, `--topbar-bg`) är mörk i båda temana: logga (inline-SVG) + `brand-kicker` (line1) + `brand-name` (`data-app-name="rest"` = line2+line3).
+- Paneler (`.sheet`): tät layout, rubriken (`h2`) och knappraden (`.sheet-buttons`) är `position: sticky` så att Avbryt/Spara alltid syns.
+
 ## Design (inloggning)
 - Inloggningsvyn följer designpaketet från Claude Design: bakgrund `#101218`, kolumn max 480px, hero 440px,
   kort `#fbfaf7` som överlappar heron med 44px. Typsnitt: EB Garamond (rubriker), Source Sans 3 (UI).
