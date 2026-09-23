@@ -50,7 +50,8 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   `showView()`/`showPanel()` i app.js växlar. Egen validering (`novalidate`) med fel under fälten.
 
 ## Övriga tabeller
-- `profiles (user_id, email, color, is_member, is_admin, code_attempts)`: skapas av triggern `handle_new_user` på `auth.users`. Användaren får bara uppdatera `color` (kolumnrättighet). `is_admin` ändras bara via `set_admin()`.
+- `profiles (user_id, email, full_name, color, is_member, is_admin, code_attempts)`: skapas av triggern `handle_new_user` på `auth.users` (tar `full_name` från signUp-metadata). Användaren får bara uppdatera `color` och `full_name` (kolumnrättighet). `is_admin` ändras bara via `set_admin()`, andras namn via `set_full_name()` (admin).
+- Namn visas överallt via `nameFor(user_id, fallbackEmail)` i app.js: `full_name` om det finns, annars e-post. `reports.reporter_email` finns kvar som reserv.
 - `custom_species (id, name, category)`: arter som användare lagt till. Unik på `lower(btrim(name))`. Medlemmar läser och lägger till, admin tar bort.
 - `app_settings (key, value)`: `signup_code` = inbjudningskoden. Bara admin kan läsa. Byts via `set_signup_code()`.
 
@@ -58,7 +59,8 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Vem som helst kan skapa ett konto (Supabase: "Allow new users to sign up" PÅ), men utan rätt inbjudningskod blir man inte medlem och ser ingenting.
 - Koden skickas i `signUp` som `options.data.signup_code`. Triggern jämför den (skiftlägesokänsligt). Fel kod → vyn "Inbjudningskod" → `redeem_signup_code()` (max 10 felförsök, sedan 'locked').
 - Auto-admin: `is_auto_admin_email()` (i dag `charlie.ledin@swedavia.se`) blir admin när kontot får giltig kod.
-- Admin ser under ⚙️: koden (kan bytas), användarlista (gör till/ta bort admin), egna arter (ta bort).
+- Alla ser under ⚙️: eget namn (kan ändras) och färg. Admin ser dessutom: koden (kan bytas), användarlista (ändra namn, gör till/ta bort admin), egna arter (ta bort).
+- Registrering kräver för- och efternamn (minst ett mellanslag, 2–80 tecken).
 - `supabase.sql` innehåller allt och är idempotent. Första körningen med `is_member` gör alla dåvarande användare till medlemmar.
 
 ## Ikoner och färger

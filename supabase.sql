@@ -44,6 +44,12 @@ alter table public.profiles add column if not exists email text;
 alter table public.profiles add column if not exists is_admin boolean not null default false;
 alter table public.profiles add column if not exists code_attempts integer not null default 0;
 
+-- För- och efternamn som visas i appen i stället för e-posten
+alter table public.profiles add column if not exists full_name text;
+alter table public.profiles drop constraint if exists profiles_full_name_check;
+alter table public.profiles add constraint profiles_full_name_check
+  check (full_name is null or char_length(btrim(full_name)) between 2 and 80);
+
 -- "is_member" = har angett rätt inbjudningskod och får använda appen.
 -- Första gången kolumnen skapas blir alla befintliga användare medlemmar.
 do $$
@@ -142,8 +148,16 @@ begin
       and lower(value) = lower(btrim(coalesce(new.raw_user_meta_data ->> 'signup_code', '')))
   ) into code_ok;
 
-  insert into public.profiles (user_id, email, is_member, is_admin)
-    values (new.id, new.email, code_ok, code_ok and public.is_auto_admin_email(new.email))
+  insert into public.profiles (user_id, email, full_name, is_member, is_admin)
+    values (
+      new.id,
+      new.email,
+      -- Namnet från registreringen (tomt eller för kort/långt = inget namn)
+      case when char_length(btrim(coalesce(new.raw_user_meta_data ->> 'full_name', ''))) between 2 and 80
+           then btrim(new.raw_user_meta_data ->> 'full_name') end,
+      code_ok,
+      code_ok and public.is_auto_admin_email(new.email)
+    )
     on conflict (user_id) do nothing;
   return new;
 end;
@@ -205,6 +219,18 @@ end;
 $$;
 
 -- Admin: gör någon till admin eller ta bort admin
+-- Admin: ändra någons namn (vanliga användare ändrar sitt eget direkt i profiles)
+create or replace function public.set_full_name(target uuid, new_name text)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.is_admin() then raise exception 'Bara admin får ändra andras namn'; end if;
+  if char_length(btrim(coalesce(new_name, ''))) not between 2 and 80 then
+    raise exception 'Namnet måste vara 2–80 tecken';
+  end if;
+  update public.profiles set full_name = btrim(new_name) where user_id = target;
+end;
+$$;
+
 create or replace function public.set_admin(target uuid, make_admin boolean)
 returns void language plpgsql security definer set search_path = '' as $$
 begin
@@ -302,17 +328,19 @@ revoke all on public.reports, public.profiles, public.custom_species, public.app
 
 grant select, insert, update, delete on public.reports to authenticated;
 grant select on public.profiles to authenticated;
-grant update (color, updated_at) on public.profiles to authenticated;  -- bara färgen, inte admin!
+grant update (color, full_name, updated_at) on public.profiles to authenticated;  -- färg och eget namn, inte admin!
 grant select, insert, delete on public.custom_species to authenticated;
 grant select on public.app_settings to authenticated;
 
 revoke execute on function public.redeem_signup_code(text) from public, anon;
 revoke execute on function public.set_signup_code(text) from public, anon;
 revoke execute on function public.set_admin(uuid, boolean) from public, anon;
+revoke execute on function public.set_full_name(uuid, text) from public, anon;
 revoke execute on function public.is_member() from public, anon;
 revoke execute on function public.is_admin() from public, anon;
 grant execute on function public.redeem_signup_code(text) to authenticated;
 grant execute on function public.set_signup_code(text) to authenticated;
 grant execute on function public.set_admin(uuid, boolean) to authenticated;
+grant execute on function public.set_full_name(uuid, text) to authenticated;
 grant execute on function public.is_member() to authenticated;
 grant execute on function public.is_admin() to authenticated;

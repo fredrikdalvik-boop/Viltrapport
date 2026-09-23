@@ -149,6 +149,12 @@ function updateCategoryVisibility() {
   $('category').required = isNew;
 }
 
+// Namnet som visas för en användare: för- och efternamn om det finns, annars e-posten
+function nameFor(userId, fallbackEmail) {
+  const p = profiles.find((x) => x.user_id === userId);
+  return p?.full_name || p?.email || fallbackEmail || 'okänd';
+}
+
 // Får den inloggade ändra/ta bort rapporten?
 function canEdit(report) {
   return isAdmin || report.user_id === currentUser?.id;
@@ -245,11 +251,32 @@ function openSettings() {
   closeFilter();
   $('user-email').textContent = (currentUser?.email ?? '') + (isAdmin ? ' (admin)' : '');
   $('settings-message').textContent = '';
+  const me = profiles.find((p) => p.user_id === currentUser?.id);
+  $('my-name').value = me?.full_name ?? '';
+  $('my-name-hint').hidden = Boolean(me?.full_name);
   renderColorPicker();
   $('admin-section').hidden = !isAdmin;
   if (isAdmin) renderAdmin();
   $('settings-sheet').hidden = false;
 }
+
+$('my-name-save').addEventListener('click', async () => {
+  const message = $('settings-message');
+  message.className = 'message';
+  const name = $('my-name').value.trim().replace(/\s+/g, ' ');
+  if (name.length < 2 || name.length > 80) {
+    message.textContent = 'Skriv ditt för- och efternamn (2–80 tecken).';
+    return;
+  }
+  const { error } = await db.from('profiles').update({ full_name: name }).eq('user_id', currentUser.id);
+  if (error) {
+    message.textContent = translateError(error);
+    return;
+  }
+  showToast('Ditt namn är sparat');
+  await loadReports();
+  openSettings();
+});
 
 // ---------- Admin ----------
 
@@ -260,16 +287,23 @@ async function renderAdmin() {
 
   // Användare
   const members = profiles.filter((p) => p.is_member)
-    .sort((a, b) => (a.email ?? '').localeCompare(b.email ?? '', 'sv'));
+    .sort((a, b) => nameFor(a.user_id).localeCompare(nameFor(b.user_id), 'sv'));
   $('admin-users').innerHTML = members.map((p) => `
-    <li>
-      <span><span style="color:${colorFor(p.user_id)}">●</span> ${escapeHtml(p.email ?? 'okänd')}
-        ${p.is_admin ? '<strong>👑 admin</strong>' : ''}</span>
-      ${p.user_id === currentUser.id ? '' : `
-        <button type="button" class="btn ${p.is_admin ? 'btn-danger' : 'btn-secondary'}"
-                data-admin-toggle="${p.user_id}" data-make="${!p.is_admin}">
-          ${p.is_admin ? 'Ta bort admin' : 'Gör till admin'}
-        </button>`}
+    <li class="admin-user">
+      <span>
+        <span style="color:${colorFor(p.user_id)}">●</span>
+        <strong>${escapeHtml(p.full_name || 'Inget namn')}</strong>
+        ${p.is_admin ? '👑' : ''}
+        <small>${escapeHtml(p.email ?? '')}</small>
+      </span>
+      <span class="admin-user-buttons">
+        <button type="button" class="btn btn-secondary" data-rename="${p.user_id}">Ändra namn</button>
+        ${p.user_id === currentUser.id ? '' : `
+          <button type="button" class="btn ${p.is_admin ? 'btn-danger' : 'btn-secondary'}"
+                  data-admin-toggle="${p.user_id}" data-make="${!p.is_admin}">
+            ${p.is_admin ? 'Ta bort admin' : 'Gör till admin'}
+          </button>`}
+      </span>
     </li>`).join('') || '<li><span class="hint">Inga användare</span></li>';
 
   // Egna arter
@@ -293,13 +327,34 @@ $('admin-code-save').addEventListener('click', async () => {
 });
 
 $('admin-users').addEventListener('click', async (e) => {
+  // Ändra någons namn
+  const renameBtn = e.target.closest('[data-rename]');
+  if (renameBtn) {
+    const person = profiles.find((p) => p.user_id === renameBtn.dataset.rename);
+    const answer = prompt(`Nytt namn för ${person?.email}:`, person?.full_name ?? '');
+    if (answer === null) return;
+    const name = answer.trim().replace(/\s+/g, ' ');
+    const { error } = person?.user_id === currentUser.id
+      ? await db.from('profiles').update({ full_name: name }).eq('user_id', currentUser.id)
+      : await db.rpc('set_full_name', { target: person.user_id, new_name: name });
+    if (error) {
+      $('settings-message').textContent = /check constraint|2–80/.test(error.message)
+        ? 'Namnet måste vara 2–80 tecken.' : translateError(error);
+      return;
+    }
+    showToast('Namnet är ändrat');
+    await loadReports();
+    renderAdmin();
+    return;
+  }
+
   const button = e.target.closest('[data-admin-toggle]');
   if (!button) return;
   const makeAdmin = button.dataset.make === 'true';
   const person = profiles.find((p) => p.user_id === button.dataset.adminToggle);
   const question = makeAdmin
-    ? `Göra ${person?.email} till admin? Admin kan ändra och ta bort allas rapporter.`
-    : `Ta bort admin för ${person?.email}?`;
+    ? `Göra ${nameFor(person?.user_id)} till admin? Admin kan ändra och ta bort allas rapporter.`
+    : `Ta bort admin för ${nameFor(person?.user_id)}?`;
   if (!confirm(question)) return;
 
   const { error } = await db.rpc('set_admin', { target: button.dataset.adminToggle, make_admin: makeAdmin });
@@ -549,24 +604,27 @@ $('forgot-form').addEventListener('submit', async (e) => {
 $('show-signup').addEventListener('click', () => {
   showPanel('signup');
   $('signup-email').value = $('login-email').value;
-  $('signup-email').focus();
+  $('signup-name').focus();
 });
 
 $('signup-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
   clearErrors();
+  const fullName = $('signup-name').value.trim().replace(/\s+/g, ' ');
+  const okName = fullName.length >= 2 && fullName.length <= 80 && fullName.includes(' ');
+  if (!okName) setFieldError($('signup-name'), 'Skriv både för- och efternamn.');
   const okEmail = validateEmail($('signup-email'));
   const okPw = validatePassword($('signup-password'), 8);
   const okCode = Boolean($('signup-code').value.trim());
   if (!okCode) setFieldError($('signup-code'), 'Fyll i inbjudningskoden.');
-  if (!okEmail || !okPw || !okCode) return;
+  if (!okName || !okEmail || !okPw || !okCode) return;
 
   setLoading(form, true, 'Skapar konto…');
   const { data, error } = await db.auth.signUp({
     email: $('signup-email').value.trim(),
     password: $('signup-password').value,
-    options: { data: { signup_code: $('signup-code').value.trim() } },
+    options: { data: { signup_code: $('signup-code').value.trim(), full_name: fullName } },
   });
   setLoading(form, false);
 
@@ -851,7 +909,7 @@ function tooltipHtml(r) {
       ${typeBadge(r)}
       <strong>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</strong>
       <span>🕒 ${formatDateTime(r.observed_at)}</span>
-      <span><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(r.reporter_email.split('@')[0])}</span>
+      <span><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</span>
       ${r.comment ? `<span class="tip-comment">💬 ${escapeHtml(r.comment.length > 60 ? r.comment.slice(0, 60) + '…' : r.comment)}</span>` : ''}
       <span class="tip-hint">Klicka för mer</span>
     </div>`;
@@ -864,7 +922,7 @@ function popupHtml(r) {
       ${typeBadge(r)}
       <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
       <p>🕒 ${formatDateTime(r.observed_at)}</p>
-      <p><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(r.reporter_email)}</p>
+      <p><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
       ${r.comment ? `<p>💬 ${escapeHtml(r.comment)}</p>` : ''}
       ${own ? `
         <div class="actions">
@@ -879,7 +937,7 @@ function popupHtml(r) {
 async function loadReports() {
   const [reportsResult, profilesResult, speciesResult] = await Promise.all([
     db.from('reports').select('*').order('observed_at', { ascending: false }).limit(5000),
-    db.from('profiles').select('user_id, color, email, is_admin, is_member'),
+    db.from('profiles').select('user_id, color, email, full_name, is_admin, is_member'),
     db.from('custom_species').select('id, name, category').order('name'),
   ]);
 
@@ -977,7 +1035,7 @@ function getFilteredReports() {
     'date-desc': byDate,
     'date-asc': (a, b) => -byDate(a, b),
     'species': (a, b) => a.species.localeCompare(b.species, 'sv') || byDate(a, b),
-    'reporter': (a, b) => a.reporter_email.localeCompare(b.reporter_email, 'sv') || byDate(a, b),
+    'reporter': (a, b) => nameFor(a.user_id, a.reporter_email).localeCompare(nameFor(b.user_id, b.reporter_email), 'sv') || byDate(a, b),
   };
   return reports.filter(matchesFilter).sort(sorters[filter.sort] ?? byDate);
 }
@@ -985,15 +1043,14 @@ function getFilteredReports() {
 // Vem som har rapporterat (för listan "Rapportör")
 function reporterOptions() {
   const people = new Map();
-  for (const r of reports) people.set(r.user_id, r.reporter_email);
+  for (const r of reports) people.set(r.user_id, nameFor(r.user_id, r.reporter_email));
   return [...people].filter(([id]) => id !== currentUser?.id)
     .sort((a, b) => a[1].localeCompare(b[1], 'sv'));
 }
 
 function reporterLabel(id) {
   if (id === 'me') return 'Bara mina';
-  return reports.find((r) => r.user_id === id)?.reporter_email
-    ?? profiles.find((p) => p.user_id === id)?.email ?? 'okänd';
+  return nameFor(id, reports.find((r) => r.user_id === id)?.reporter_email);
 }
 
 function updateFilterOptions() {
@@ -1027,7 +1084,7 @@ function renderFilterBar(shown) {
   if (filter.animal) chips.push(['animal', `${filter.animal.icon} ${filter.animal.label}`]);
   if (filter.reporter) {
     const dot = filter.reporter === 'me' ? '' : `<span style="color:${colorFor(filter.reporter)}">●</span> `;
-    chips.push(['reporter', `${dot}👤 ${escapeHtml(reporterLabel(filter.reporter).split('@')[0])}`, true]);
+    chips.push(['reporter', `${dot}👤 ${escapeHtml(reporterLabel(filter.reporter))}`, true]);
   }
   if (dateLabel()) chips.push(['date', `📅 ${dateLabel()}`]);
 
@@ -1224,7 +1281,7 @@ function renderList(list) {
         <h3><span class="card-icon" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</span>
             ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
         <p>🕒 ${formatDateTime(r.observed_at)}</p>
-        <p>👤 ${escapeHtml(r.reporter_email)}${own ? ' (du)' : ''}</p>
+        <p>👤 ${escapeHtml(nameFor(r.user_id, r.reporter_email))}${own ? ' (du)' : ''}</p>
         ${r.comment ? `<p class="comment">💬 ${escapeHtml(r.comment)}</p>` : ''}
         <div class="actions">
           <button class="btn btn-secondary" data-action="show" data-id="${r.id}">Visa på kartan</button>
