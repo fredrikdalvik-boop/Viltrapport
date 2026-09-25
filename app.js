@@ -958,6 +958,7 @@ function tooltipHtml(r) {
       ${typeBadge(r)}
       <strong>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</strong>
       <span>🕒 ${formatDateTime(r.observed_at)}</span>
+      ${weatherLine(r)}
       <span><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</span>
       ${r.comment ? `<span class="tip-comment">💬 ${escapeHtml(r.comment.length > 60 ? r.comment.slice(0, 60) + '…' : r.comment)}</span>` : ''}
       ${riskPill(r)}
@@ -972,11 +973,12 @@ function popupHtml(r) {
       ${typeBadge(r)}
       <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
       <p>🕒 ${formatDateTime(r.observed_at)}</p>
+      <p>${weatherLine(r)}</p>
       <p><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
       ${r.comment ? `<p>💬 ${escapeHtml(r.comment)}</p>` : ''}
       <p>${riskPill(r)}</p>
       <div class="actions">
-        <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">⚠️ Riskanalys</button>
+        <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">📄 Detaljer, väder & risk</button>
       </div>
       ${own ? `
         <div class="actions">
@@ -1025,6 +1027,7 @@ async function loadReports() {
   reports = reportsResult.data;
   updateFilterOptions();
   render();
+  backfillWeather();
 }
 
 // ---------- Filter ----------
@@ -1039,13 +1042,18 @@ const EMPTY_FILTER = {
   quick: '',        // '' | 'today' | '7' | '30'
   from: '',
   to: '',
+  tod: '',          // tid på dygnet: '' eller WEATHER.TIME_OF_DAY[].key
+  light: '',        // ljus: '' | 'natt' | 'gryning' | 'dag' | 'skymning'
+  wx: [],           // vädermarkörer som alla måste stämma, t.ex. ['regnat', 'blasigt']
   sort: 'date-desc',
 };
 let filter = loadFilter();
 
 function loadFilter() {
   try {
-    return { ...EMPTY_FILTER, ...JSON.parse(localStorage.getItem(FILTER_KEY) || '{}') };
+    const saved = { ...EMPTY_FILTER, ...JSON.parse(localStorage.getItem(FILTER_KEY) || '{}') };
+    if (!Array.isArray(saved.wx)) saved.wx = [];
+    return saved;
   } catch {
     return { ...EMPTY_FILTER };
   }
@@ -1082,6 +1090,12 @@ function dateRange() {
 
 function matchesFilter(r) {
   if (filter.type && typeOf(r) !== filter.type) return false;
+  if (filter.tod || filter.light || filter.wx.length) {
+    const c = contextOf(r);
+    if (filter.tod && c.tod !== filter.tod) return false;
+    if (filter.light && c.light !== filter.light) return false;
+    if (filter.wx.length && (!c.wx || !filter.wx.every((t) => c.wx.tagSet.has(t)))) return false;
+  }
   const a = filter.animal;
   if (a?.type === 'kind' && kindOf(r.species) !== a.value) return false;
   if (a?.type === 'group' && groupOf(r.species) !== a.value) return false;
@@ -1155,6 +1169,14 @@ function renderFilterBar(shown) {
     chips.push(['reporter', `${dot}👤 ${escapeHtml(reporterLabel(filter.reporter))}`, true]);
   }
   if (dateLabel()) chips.push(['date', `📅 ${dateLabel()}`]);
+  if (filter.tod) {
+    const t = WEATHER.TIME_OF_DAY.find((x) => x.key === filter.tod);
+    if (t) chips.push(['tod', `${t.icon} ${t.label}`]);
+  }
+  if (WEATHER.LIGHT[filter.light]) chips.push(['light', `${WEATHER.LIGHT[filter.light].icon} ${WEATHER.LIGHT[filter.light].label}`]);
+  for (const t of filter.wx) {
+    if (WEATHER.TAGS[t]) chips.push([`wx:${t}`, `${WEATHER.TAGS[t].icon} ${WEATHER.TAGS[t].label}`]);
+  }
 
   $('filter-chips').innerHTML = chips.map(([key, label, isHtml]) => `
     <button type="button" class="chip" data-clear="${key}" aria-label="Ta bort filtret">
@@ -1176,6 +1198,9 @@ $('filter-chips').addEventListener('click', (e) => {
   if (chip.dataset.clear === 'animal') setFilter({ animal: null });
   if (chip.dataset.clear === 'reporter') setFilter({ reporter: '' });
   if (chip.dataset.clear === 'date') setFilter({ quick: '', from: '', to: '' });
+  if (chip.dataset.clear === 'tod') setFilter({ tod: '' });
+  if (chip.dataset.clear === 'light') setFilter({ light: '' });
+  if (chip.dataset.clear.startsWith('wx:')) setFilter({ wx: filter.wx.filter((t) => `wx:${t}` !== chip.dataset.clear) });
 });
 
 // Fyll i filterpanelen från det sparade filtret
@@ -1188,6 +1213,9 @@ function syncFilterForm() {
   document.querySelectorAll('#filter-type [data-type]').forEach((b) => {
     b.classList.toggle('selected', b.dataset.type === filter.type);
   });
+  document.querySelectorAll('#filter-tod [data-tod]').forEach((b) => b.classList.toggle('selected', b.dataset.tod === filter.tod));
+  document.querySelectorAll('#filter-light [data-light]').forEach((b) => b.classList.toggle('selected', b.dataset.light === filter.light));
+  document.querySelectorAll('#filter-wx [data-wx]').forEach((b) => b.classList.toggle('selected', filter.wx.includes(b.dataset.wx)));
   document.querySelectorAll('#filter-quick [data-quick]').forEach((b) => {
     b.classList.toggle('selected', b.dataset.quick === filter.quick && (filter.quick || (!filter.from && !filter.to)));
   });
@@ -1234,6 +1262,28 @@ $('filter-reporter').addEventListener('change', (e) => setFilter({ reporter: e.t
 $('sort').addEventListener('change', (e) => setFilter({ sort: e.target.value }));
 $('filter-from').addEventListener('change', (e) => setFilter({ from: e.target.value, quick: '' }));
 $('filter-to').addEventListener('change', (e) => setFilter({ to: e.target.value, quick: '' }));
+// Knappar för tid på dygnet, ljus och väder
+$('filter-tod').innerHTML = '<button type="button" data-tod="">Alla</button>' +
+  WEATHER.TIME_OF_DAY.map((t) => `<button type="button" data-tod="${t.key}">${t.icon} ${t.label}</button>`).join('');
+$('filter-light').innerHTML = '<button type="button" data-light="">Alla</button>' +
+  Object.entries(WEATHER.LIGHT).map(([k, t]) => `<button type="button" data-light="${k}">${t.icon} ${t.label}</button>`).join('');
+$('filter-wx').innerHTML = Object.entries(WEATHER.TAGS)
+  .map(([k, t]) => `<button type="button" data-wx="${k}">${t.icon} ${t.label}</button>`).join('');
+$('filter-tod').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tod]');
+  if (b) setFilter({ tod: b.dataset.tod });
+});
+$('filter-light').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-light]');
+  if (b) setFilter({ light: b.dataset.light });
+});
+$('filter-wx').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-wx]');
+  if (!b) return;
+  const t = b.dataset.wx;
+  setFilter({ wx: filter.wx.includes(t) ? filter.wx.filter((x) => x !== t) : [...filter.wx, t] });
+});
+
 $('filter-type').addEventListener('click', (e) => {
   const b = e.target.closest('[data-type]');
   if (b) setFilter({ type: b.dataset.type });
@@ -1356,6 +1406,7 @@ function render() {
   renderMarkers(list);
   renderList(list);
   renderRisk(list);
+  renderStats(list);
   renderFilterBar(list.length);
   // Filterraden kan ändra höjd – då måste kartan räkna om sin storlek
   map?.invalidateSize();
@@ -1370,11 +1421,12 @@ function renderList(list) {
         <h3><span class="card-icon" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</span>
             ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
         <p>🕒 ${formatDateTime(r.observed_at)}</p>
+        <p>${weatherLine(r)}</p>
         <p>👤 ${escapeHtml(nameFor(r.user_id, r.reporter_email))}${own ? ' (du)' : ''}</p>
         ${r.comment ? `<p class="comment">💬 ${escapeHtml(r.comment)}</p>` : ''}
         <p>${riskPill(r)}</p>
         <div class="actions">
-          <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">⚠️ Risk</button>
+          <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">📄 Detaljer</button>
           <button class="btn btn-secondary" data-action="show" data-id="${r.id}">Visa på kartan</button>
           ${canEdit(r) ? `
             <button class="btn btn-secondary" data-action="edit" data-id="${r.id}">Redigera</button>
@@ -1383,6 +1435,313 @@ function renderList(list) {
       </li>`;
   }).join('') || `<li class="hint">${reports.length ? 'Inga rapporter matchar filtret.' : 'Inga rapporter än.'}</li>`;
 }
+
+// ---------- Väder, ljus och tid på dygnet ----------
+// Beräkningarna finns i weather.js. Vädret sparas i rapporten när den skapas.
+
+const contextCache = new Map();
+
+// Ljus, tid på dygnet och väder för en rapport (sparas i minnet)
+function contextOf(r) {
+  const key = `${r.id}|${r.observed_at}|${r.lat}|${r.lng}|${r.weather?.fetched ?? ''}`;
+  let c = contextCache.get(key);
+  if (!c) {
+    const light = WEATHER.lightPhase(r.observed_at, r.lat, r.lng);
+    c = { light: light.key, sunAlt: light.altitude, tod: WEATHER.timeOfDay(r.observed_at)?.key, wx: WEATHER.analyze(r.weather) };
+    contextCache.set(key, c);
+  }
+  return c;
+}
+
+// Kort rad: "🌅 Gryning · 🌧️ Lätt regn · 8° · 6 m/s (byar 11)"
+function weatherLine(r) {
+  const c = contextOf(r);
+  const light = WEATHER.LIGHT[c.light];
+  return `<span class="wx-line">${light.icon} ${light.label} · ${c.wx ? escapeHtml(WEATHER.shortText(c.wx)) : '<em>väder saknas</em>'}</span>`;
+}
+
+// Utfällbar vädersektion i händelsevyn
+function weatherDetailsHtml(r) {
+  const c = contextOf(r);
+  const light = WEATHER.LIGHT[c.light];
+  const tod = WEATHER.TIME_OF_DAY.find((t) => t.key === c.tod);
+  const lightText = `${light.icon} ${light.label} (solen ${Math.round(c.sunAlt)}°) · ${tod.icon} ${tod.label}`;
+  if (!c.wx) {
+    return `<div class="wx-details"><div class="wx-body" style="padding-top:10px">
+      <strong>🌦️ Väder</strong><br>${lightText}<br><span class="hint">Väder saknas för den här rapporten – det hämtas automatiskt när det går.</span></div></div>`;
+  }
+  const a = c.wx;
+  const n = a.now;
+  const f = WEATHER.format;
+  const hourFmt = (t) => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  const rows = r.weather.hours.map((h, i, all) => {
+    const info = WEATHER.codeInfo(h.code, h.day !== 0);
+    return `<tr class="${i === all.length - 1 ? 'obs' : ''}">
+      <td>${hourFmt(h.t)}</td><td title="${escapeHtml(info.text)}">${info.icon}</td><td>${f.temp(h.temp)}</td>
+      <td>${f.r1(h.precip)}</td><td>${h.wind == null ? '–' : Math.round(h.wind)}/${h.gust == null ? '–' : Math.round(h.gust)}</td>
+      <td>${h.cloud ?? '–'}</td><td>${h.vis == null ? '–' : h.vis >= 10000 ? '10+' : f.r1(h.vis / 1000)}</td></tr>`;
+  }).join('');
+  const change = (x, unit) => (x == null ? '–' : `${x > 0 ? '+' : ''}${f.r1(x)} ${unit}`);
+  return `
+    <details class="wx-details">
+      <summary>🌦️ Väder: ${escapeHtml(WEATHER.shortText(a))}<small>${lightText} · tryck för detaljer</small></summary>
+      <div class="wx-body">
+        <div class="wx-tags">${a.tags.map((t) => `<span class="wx-tag">${WEATHER.TAGS[t].icon} ${WEATHER.TAGS[t].label}</span>`).join('') || '<span class="hint">Inga särskilda vädermarkörer</span>'}</div>
+        <div class="wx-facts">
+          <div><span>Temperatur</span><span>${f.temp(n.temp)}</span></div>
+          <div><span>Luftfuktighet</span><span>${n.hum ?? '–'} %</span></div>
+          <div><span>Vind</span><span>${f.r1(n.wind)} m/s ${WEATHER.windDir(n.dir)}</span></div>
+          <div><span>Byar (max 4 h)</span><span>${f.r1(a.maxGust)} m/s</span></div>
+          <div><span>Nederbörd timmen</span><span>${f.r1(a.precipNow)} mm</span></div>
+          <div><span>Nederbörd 4 h före</span><span>${f.r1(a.precipBefore)} mm</span></div>
+          <div><span>Moln</span><span>${n.cloud ?? '–'} %</span></div>
+          <div><span>Sikt</span><span>${n.vis == null ? '–' : `${f.r1(n.vis / 1000)} km`}</span></div>
+          <div><span>Sol senaste 4 h</span><span>${a.sunMinutes} min</span></div>
+          <div><span>Lufttryck</span><span>${n.pres == null ? '–' : Math.round(n.pres)} hPa</span></div>
+          <div><span>Tryckändring 4 h</span><span>${change(a.pressureChange, 'hPa')}</span></div>
+          <div><span>Temperaturändring 4 h</span><span>${change(a.tempChange, '°')}</span></div>
+        </div>
+        <table class="wx-hours">
+          <tr><th>Tid</th><th></th><th>Temp</th><th>mm</th><th>Vind/byar</th><th>Moln %</th><th>Sikt km</th></tr>
+          ${rows}
+        </table>
+        <p class="hint wx-credit">Värden per timme, sista raden = observationen. Väderdata: Open-Meteo.com (CC BY 4.0).</p>
+      </div>
+    </details>`;
+}
+
+// Hämtar väder, men ger upp efter 8 sekunder (rapporten sparas ändå)
+async function fetchWeatherSafe(lat, lng, observedAt) {
+  try {
+    return await Promise.race([
+      WEATHER.fetchFor(lat, lng, observedAt),
+      new Promise((resolve) => { setTimeout(() => resolve(null), 8000); }),
+    ]);
+  } catch (err) {
+    console.warn('Väder:', err.message);
+    return null;
+  }
+}
+
+// Fyller i väder på rapporter som saknar det (t.ex. gamla eller sparade utan nät)
+const weatherFailed = new Set();
+let backfillRunning = false;
+async function backfillWeather() {
+  if (backfillRunning || !navigator.onLine) return;
+  const missing = reports.filter((r) => !r.weather && !weatherFailed.has(r.id)
+    && new Date(r.observed_at).getTime() < Date.now() + 3600000).slice(0, 40);
+  if (!missing.length) return;
+  backfillRunning = true;
+  let changed = 0;
+  for (const r of missing) {
+    const w = await fetchWeatherSafe(r.lat, r.lng, r.observed_at);
+    if (!w) { weatherFailed.add(r.id); continue; }
+    const { data, error } = await db.rpc('set_report_weather', { p_report_id: r.id, p_weather: w });
+    if (error) {
+      console.warn('Kunde inte spara väder:', error.message);
+      weatherFailed.add(r.id);
+      if (/function|schema cache/i.test(error.message)) break;  // databasen inte uppdaterad
+      continue;
+    }
+    if (data) { r.weather = w; changed++; }
+  }
+  backfillRunning = false;
+  if (changed) render();
+}
+
+// ---------- Statistik ----------
+// Alla grupperingar. key(r) ger en nyckel (eller keys(r) flera), name(k) visningsnamn,
+// order = fast ordning, filter(k) = vad som händer när man trycker på stapeln.
+// Lägg gärna till fler grupperingar här när vi kommer på bra markörer.
+
+const WEEKDAYS = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
+const MONTHS = ['Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni', 'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December'];
+const MISSING = '__saknas';
+const swedishParts = (d) => {
+  const parts = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', weekday: 'long', month: 'numeric' })
+    .formatToParts(new Date(d));
+  return { weekday: parts.find((x) => x.type === 'weekday').value, month: Number(parts.find((x) => x.type === 'month').value) };
+};
+const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+
+const STAT_DIMS = {
+  species:   { label: 'Art', icon: '🐾', top: 12, key: (r) => r.species, name: (k) => `${iconFor(k)} ${k}`,
+    filter: (k) => ({ animal: { type: 'species', value: k, label: k, icon: iconFor(k) } }) },
+  kind:      { label: 'Fåglar / däggdjur', icon: '🦆', key: (r) => kindOf(r.species), order: ['fagel', 'daggdjur', 'annat'],
+    name: (k) => ({ fagel: '🐦 Fåglar', daggdjur: '🐾 Däggdjur', annat: '❓ Annat' })[k],
+    filter: (k) => (k === 'annat' ? null : { animal: { type: 'kind', value: k, label: k === 'fagel' ? 'Alla fåglar' : 'Alla däggdjur', icon: k === 'fagel' ? '🐦' : '🐾' } }) },
+  group:     { label: 'Djurgrupp', icon: '🗂️', top: 12, key: (r) => groupOf(r.species),
+    name: (k) => `${iconFor(null, k)} ${(window.SPECIES_GROUPS[k]?.label ?? k).split(' (')[0]}`,
+    filter: (k) => ({ animal: { type: 'group', value: k, label: (window.SPECIES_GROUPS[k]?.label ?? k).split(' (')[0], icon: iconFor(null, k) } }) },
+  tod:       { label: 'Tid på dygnet', icon: '🕒', key: (r) => contextOf(r).tod, order: WEATHER.TIME_OF_DAY.map((t) => t.key),
+    name: (k) => { const t = WEATHER.TIME_OF_DAY.find((x) => x.key === k); return `${t.icon} ${t.label}`; }, filter: (k) => ({ tod: k }) },
+  light:     { label: 'Ljus', icon: '🌅', key: (r) => contextOf(r).light, order: Object.keys(WEATHER.LIGHT),
+    name: (k) => `${WEATHER.LIGHT[k].icon} ${WEATHER.LIGHT[k].label}`, filter: (k) => ({ light: k }) },
+  hour:      { label: 'Klockslag', icon: '🕰️', key: (r) => String(WEATHER.localHour(r.observed_at)).padStart(2, '0'),
+    order: Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')), name: (k) => `${k}–${String((Number(k) + 1) % 24).padStart(2, '0')}`, hideEmpty: true },
+  condition: { label: 'Väderlek', icon: '🌦️', key: (r) => contextOf(r).wx?.condition ?? null, order: Object.keys(WEATHER.CONDITIONS),
+    name: (k) => `${WEATHER.CONDITIONS[k].icon} ${WEATHER.CONDITIONS[k].label}` },
+  wxtag:     { label: 'Vädermarkörer', icon: '🏷️', note: 'en rapport kan ha flera', keys: (r) => (contextOf(r).wx ? [...contextOf(r).wx.tagSet] : null),
+    order: Object.keys(WEATHER.TAGS), name: (k) => `${WEATHER.TAGS[k].icon} ${WEATHER.TAGS[k].label}`,
+    filter: (k) => ({ wx: filter.wx.includes(k) ? filter.wx : [...filter.wx, k] }) },
+  temp:      { label: 'Temperatur', icon: '🌡️', key: (r) => WEATHER.bandFor(WEATHER.TEMP_BANDS, contextOf(r).wx?.now.temp),
+    order: WEATHER.TEMP_BANDS.map((b) => b.label), name: (k) => k },
+  wind:      { label: 'Vind', icon: '💨', key: (r) => WEATHER.bandFor(WEATHER.WIND_BANDS, contextOf(r).wx?.now.wind),
+    order: WEATHER.WIND_BANDS.map((b) => b.label), name: (k) => k },
+  weekday:   { label: 'Veckodag', icon: '📅', key: (r) => cap(swedishParts(r.observed_at).weekday), order: WEEKDAYS, name: (k) => k },
+  month:     { label: 'Månad', icon: '🗓️', key: (r) => MONTHS[swedishParts(r.observed_at).month - 1], order: MONTHS, name: (k) => k, hideEmpty: true },
+  type:      { label: 'Rapporttyp', icon: '⚠️', key: (r) => typeOf(r), order: Object.keys(REPORT_TYPES),
+    name: (k) => REPORT_TYPES[k].label, filter: (k) => ({ type: k }) },
+  zone:      { label: 'Läge', icon: '📍', key: (r) => assessReport(r).zone.zone, order: Object.keys(RISK.ZONES),
+    name: (k) => RISK.ZONES[k]?.label ?? k },
+  level:     { label: 'Risknivå (från början)', icon: '🚦', key: (r) => assessReport(r).baseLevel.key, order: RISK.LEVELS.map((l) => l.key),
+    name: (k) => RISK.LEVELS.find((l) => l.key === k)?.label ?? k },
+  reporter:  { label: 'Rapportör', icon: '👤', top: 12, key: (r) => r.user_id, name: (k) => nameFor(k), filter: (k) => ({ reporter: k }) },
+};
+// Korten som visas (i den här ordningen)
+const STAT_CARDS = ['species', 'kind', 'tod', 'light', 'condition', 'wxtag', 'temp', 'wind', 'hour', 'weekday', 'month', 'type', 'zone', 'level', 'group', 'reporter'];
+
+const STATS_KEY = 'viltrapport-stats';
+let statsPrefs = (() => {
+  try { return { metric: 'reports', rows: 'species', cols: 'tod', ...JSON.parse(localStorage.getItem(STATS_KEY) || '{}') }; } catch { return { metric: 'reports', rows: 'species', cols: 'tod' }; }
+})();
+function saveStatsPrefs(changes) {
+  statsPrefs = { ...statsPrefs, ...changes };
+  try { localStorage.setItem(STATS_KEY, JSON.stringify(statsPrefs)); } catch { /* ignoreras */ }
+}
+
+const weightOf = (r) => (statsPrefs.metric === 'animals' ? (Number(r.animal_count) || 1) : 1);
+const keysOf = (dim, r) => {
+  const d = STAT_DIMS[dim];
+  const k = d.keys ? d.keys(r) : [d.key(r)];
+  return k == null || k[0] == null ? [MISSING] : k;
+};
+const dimName = (dim, k) => (k === MISSING ? (['condition', 'wxtag', 'temp', 'wind'].includes(dim) ? 'Väder saknas' : 'Okänt') : STAT_DIMS[dim].name(k));
+
+// Räknar per nyckel. Ger [[nyckel, värde], …] sorterat.
+function tally(dim, list) {
+  const d = STAT_DIMS[dim];
+  const counts = new Map();
+  for (const r of list) for (const k of keysOf(dim, r)) counts.set(k, (counts.get(k) ?? 0) + weightOf(r));
+  let rows = [...counts];
+  if (d.order) {
+    rows = [...d.order.map((k) => [k, counts.get(k) ?? 0]).filter(([, v]) => v || !d.hideEmpty),
+      ...rows.filter(([k]) => !d.order.includes(k))];
+  } else {
+    rows.sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0]), 'sv'));
+  }
+  return rows;
+}
+
+function renderStats(list) {
+  if (!$('stats-cards') || $('stats-view').hidden) return;
+  const metricWord = statsPrefs.metric === 'animals' ? 'djur' : 'rapporter';
+  document.querySelectorAll('#stats-metric [data-metric]').forEach((b) => b.classList.toggle('selected', b.dataset.metric === statsPrefs.metric));
+
+  // Nyckeltal
+  const animals = list.reduce((sum, r) => sum + (Number(r.animal_count) || 0), 0);
+  const withWx = list.filter((r) => contextOf(r).wx).length;
+  const kpis = [
+    [list.length, 'rapporter'], [animals, 'djur'], [new Set(list.map((r) => r.species)).size, 'arter'],
+    [list.filter((r) => typeOf(r) === 'olycka').length, 'olyckor'], [list.filter((r) => typeOf(r) === 'birdstrike').length, 'birdstrikes'],
+    [list.length ? `${Math.round((withWx / list.length) * 100)} %` : '–', 'med väder'],
+  ];
+  $('stats-kpis').innerHTML = kpis.map(([v, l]) => `<div class="kpi"><strong>${v}</strong><span>${l}</span></div>`).join('');
+
+  // Korta slutsatser
+  const top = (dim) => tally(dim, list).filter(([k]) => k !== MISSING).sort((a, b) => b[1] - a[1])[0];
+  const total = list.reduce((sum, r) => sum + weightOf(r), 0);
+  const pct = (v) => (total ? Math.round((v / total) * 100) : 0);
+  const insights = [];
+  if (list.length) {
+    const sp = top('species'); const td = top('tod'); const li = top('light'); const co = top('condition');
+    if (sp) insights.push(`Flest ${metricWord}: <strong>${escapeHtml(dimName('species', sp[0]))}</strong> (${sp[1]}, ${pct(sp[1])} %)`);
+    if (td) insights.push(`Vanligaste tid på dygnet: <strong>${dimName('tod', td[0])}</strong> (${pct(td[1])} %)`);
+    if (li) insights.push(`Ljus: oftast <strong>${dimName('light', li[0])}</strong> (${pct(li[1])} %)`);
+    if (co) insights.push(`Vanligaste väder: <strong>${dimName('condition', co[0])}</strong> (${pct(co[1])} %)`);
+  }
+  $('stats-insights').innerHTML = insights.map((x) => `<p>💡 ${x}</p>`).join('');
+
+  // Stapeldiagram
+  $('stats-cards').innerHTML = STAT_CARDS.map((dim) => {
+    const d = STAT_DIMS[dim];
+    let rows = tally(dim, list);
+    if (d.top && rows.length > d.top) {
+      const rest = rows.slice(d.top).reduce((sum, [, v]) => sum + v, 0);
+      rows = [...rows.slice(0, d.top), ['__ovriga', rest]];
+    }
+    const maxV = Math.max(1, ...rows.map(([, v]) => v));
+    const bars = rows.map(([k, v]) => {
+      const label = k === '__ovriga' ? 'Övriga' : dimName(dim, k);
+      const clickable = d.filter && k !== MISSING && k !== '__ovriga' && d.filter(k);
+      const tag = clickable ? 'button' : 'div';
+      const tip = `${label}: ${v} ${metricWord} (${pct(v)} %)`;
+      return `<${tag} ${clickable ? `type="button" data-stat-dim="${dim}" data-stat-key="${escapeHtml(k)}"` : ''}
+          class="bar-row ${k === MISSING || k === '__ovriga' ? 'muted' : ''}" title="${escapeHtml(tip)}">
+        <span class="bar-label">${escapeHtml(label)}</span>
+        <span class="bar-track"><span class="bar-fill" style="width:${(v / maxV) * 100}%"></span></span>
+        <span class="bar-value">${v}<small>${pct(v)} %</small></span>
+      </${tag}>`;
+    }).join('') || '<p class="hint">Inga data.</p>';
+    return `<div class="stat-card"><h3>${d.icon} ${d.label}${d.note ? `<small>${d.note}</small>` : ''}</h3>${bars}</div>`;
+  }).join('');
+
+  renderCompare(list);
+}
+
+// Jämförelsetabell: rader × kolumner, färgstyrka efter antal
+const SEQ_BLUE = ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b'];
+function renderCompare(list) {
+  const options = STAT_CARDS.map((k) => `<option value="${k}">${STAT_DIMS[k].label}</option>`).join('');
+  for (const [id, key] of [['compare-rows', 'rows'], ['compare-cols', 'cols']]) {
+    if (!$(id).options.length) $(id).innerHTML = options;
+    $(id).value = statsPrefs[key];
+  }
+  const rDim = statsPrefs.rows;
+  const cDim = statsPrefs.cols;
+  const rowKeys = tally(rDim, list).filter(([, v]) => v).slice(0, 15).map(([k]) => k);
+  const colKeys = tally(cDim, list).filter(([, v]) => v).slice(0, 10).map(([k]) => k);
+  if (!rowKeys.length || !colKeys.length) {
+    $('compare-table').innerHTML = '<p class="hint">Inga data att jämföra.</p>';
+    return;
+  }
+  const cell = new Map();
+  for (const r of list) {
+    for (const a of keysOf(rDim, r)) for (const b of keysOf(cDim, r)) {
+      const key = `${a}\u0000${b}`;
+      cell.set(key, (cell.get(key) ?? 0) + weightOf(r));
+    }
+  }
+  const maxV = Math.max(1, ...cell.values());
+  const shade = (v) => {
+    if (!v) return 'background:transparent;color:var(--muted)';
+    const i = Math.min(SEQ_BLUE.length - 1, Math.floor((v / maxV) * (SEQ_BLUE.length - 1) + 0.0001));
+    return `background:${SEQ_BLUE[i]};color:${i >= 3 ? '#fff' : '#17181c'}`;
+  };
+  const head = `<tr><th></th>${colKeys.map((k) => `<th>${escapeHtml(dimName(cDim, k))}</th>`).join('')}</tr>`;
+  const body = rowKeys.map((rk) => `<tr><th class="row-head" title="${escapeHtml(dimName(rDim, rk))}">${escapeHtml(dimName(rDim, rk))}</th>${
+    colKeys.map((ck) => { const v = cell.get(`${rk}\u0000${ck}`) ?? 0;
+      return `<td style="${shade(v)}" title="${escapeHtml(`${dimName(rDim, rk)} + ${dimName(cDim, ck)}: ${v}`)}">${v || '·'}</td>`; }).join('')}</tr>`).join('');
+  $('compare-table').innerHTML = `<table class="compare-table">${head}${body}</table>`;
+}
+
+$('stats-metric').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-metric]');
+  if (!b) return;
+  saveStatsPrefs({ metric: b.dataset.metric });
+  render();
+});
+$('compare-rows').addEventListener('change', (e) => { saveStatsPrefs({ rows: e.target.value }); render(); });
+$('compare-cols').addEventListener('change', (e) => { saveStatsPrefs({ cols: e.target.value }); render(); });
+$('stats-cards').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-stat-dim]');
+  if (!b) return;
+  const change = STAT_DIMS[b.dataset.statDim].filter(b.dataset.statKey);
+  if (change) {
+    setFilter(change);
+    showToast('Filtret är uppdaterat');
+  }
+});
 
 // ---------- Riskanalys ----------
 // Beräkningen finns i risk.js. Här visas den och här registreras åtgärder.
@@ -1536,6 +1895,8 @@ function renderRiskSheet() {
       ${a.stepsDown ? `<tr class="total"><td>Ålder ${ageText(a.ageHours)}: sänkt ${a.stepsDown} ${a.stepsDown === 1 ? 'nivå' : 'nivåer'}
         (${a.baseLevel.label} → ${a.expired ? 'inaktuell' : a.level.label})</td><td>${a.expired ? '–' : a.score}</td></tr>` : ''}
     </table>
+
+    ${weatherDetailsHtml(r)}
 
     <h4 class="risk-section">Rapporten</h4>
     <p>${typeBadge(r) || '👁️ Observation'} · 🕒 ${formatDateTime(r.observed_at)} · 👤 ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
@@ -1816,6 +2177,31 @@ function makeSheet(rows, widths) {
   return ws;
 }
 
+// Väder, ljus och tid på dygnet som kolumner i exporten
+function weatherColumns(r) {
+  const c = contextOf(r);
+  const a = c.wx;
+  const n = a?.now;
+  const v = (x) => (x == null ? '' : Math.round(x * 10) / 10);
+  return {
+    'Ljus': WEATHER.LIGHT[c.light].label,
+    'Solhöjd (°)': Math.round(c.sunAlt),
+    'Tid på dygnet': WEATHER.TIME_OF_DAY.find((t) => t.key === c.tod)?.label ?? '',
+    'Väder': a ? a.info.text : 'Saknas',
+    'Temperatur (°C)': v(n?.temp),
+    'Vind (m/s)': v(n?.wind),
+    'Byar max 4 h (m/s)': a ? v(a.maxGust) : '',
+    'Vindriktning': n ? WEATHER.windDir(n.dir) : '',
+    'Moln (%)': n?.cloud ?? '',
+    'Sikt (m)': n?.vis ?? '',
+    'Nederbörd timmen (mm)': a ? v(a.precipNow) : '',
+    'Nederbörd 4 h före (mm)': a ? v(a.precipBefore) : '',
+    'Sol 4 h (min)': a ? a.sunMinutes : '',
+    'Lufttrycksändring 4 h (hPa)': a ? v(a.pressureChange) : '',
+    'Vädermarkörer': a ? a.tags.map((t) => WEATHER.TAGS[t].label).join(', ') : '',
+  };
+}
+
 // Datum till Excel (tomt om det saknas)
 const xlDate = (value) => (value ? new Date(value) : '');
 
@@ -1872,6 +2258,7 @@ async function exportExcel(onlyFiltered) {
       'Registrerad': xlDate(r.created_at),
       'Senast ändrad': xlDate(r.updated_at),
       'Karta': `https://www.google.com/maps?q=${r.lat},${r.lng}`,
+      ...weatherColumns(r),
     };
   });
 
@@ -1945,6 +2332,25 @@ async function exportExcel(onlyFiltered) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, makeSheet(reportRows, { 'Sedd': 17, 'Kommentar': 40, 'Zon': 26, 'Karta': 45, 'Registrerad': 17, 'Senast ändrad': 17, 'Hanterad': 17 }), 'Rapporter');
   XLSX.utils.book_append_sheet(wb, makeSheet(actionRows.length ? actionRows : [{ 'Info': 'Inga åtgärder' }], { 'Sedd': 17, 'Tid': 17, 'Kommentar': 40 }), 'Åtgärder');
+  // Vädret timme för timme (4 h före + observationstimmen)
+  const wxRows = list.flatMap((r) => (r.weather?.hours ?? []).map((h, i, all) => ({
+    'Rapport-ID': r.id,
+    'Djurslag': r.species,
+    'Timme': xlDate(h.t),
+    'Timmar före obs': all.length - 1 - i,
+    'Väder': WEATHER.codeInfo(h.code, h.day !== 0).text,
+    'Temperatur (°C)': h.temp ?? '',
+    'Nederbörd (mm)': h.precip ?? '',
+    'Snö (cm)': h.snow ?? '',
+    'Vind (m/s)': h.wind ?? '',
+    'Byar (m/s)': h.gust ?? '',
+    'Vindriktning (°)': h.dir ?? '',
+    'Moln (%)': h.cloud ?? '',
+    'Sikt (m)': h.vis ?? '',
+    'Lufttryck (hPa)': h.pres ?? '',
+    'Sol (min)': h.sun == null ? '' : Math.round(h.sun / 60),
+  })));
+  XLSX.utils.book_append_sheet(wb, makeSheet(wxRows.length ? wxRows : [{ 'Info': 'Inget väder sparat' }], { 'Timme': 17 }), 'Väder per timme');
   XLSX.utils.book_append_sheet(wb, makeSheet(summaryRows, { 'Uppgift': 32, 'Värde': 22 }), 'Sammanfattning');
   XLSX.utils.book_append_sheet(wb, makeSheet(speciesRows.length ? speciesRows : [{ 'Info': 'Inga rapporter' }], { 'Djurslag': 28 }), 'Per djurslag');
   XLSX.utils.book_append_sheet(wb, makeSheet(zoneRows.length ? zoneRows : [{ 'Info': 'Inga riskzoner ritade' }], { 'Namn': 24, 'Koordinater (lat, lng)': 80 }), 'Riskzoner');
@@ -2106,6 +2512,7 @@ function switchTab(viewId) {
   if (drawing && viewId !== 'map-view') endDraw();
   document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== viewId; });
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === viewId));
+  if (viewId === 'stats-view') render();
   if (viewId === 'map-view') {
     map?.invalidateSize();
   } else {
@@ -2220,6 +2627,16 @@ $('report-form').addEventListener('submit', async (e) => {
 
   const saveBtn = $('save-btn');
   saveBtn.disabled = true;
+
+  // Väder: hämtas för nya rapporter, och när tid eller plats ändrats
+  const old = editingId ? reports.find((r) => r.id === editingId) : null;
+  const moved = !old
+    || new Date(old.observed_at).getTime() !== new Date(payload.observed_at).getTime()
+    || Math.abs(old.lat - payload.lat) > 0.0005 || Math.abs(old.lng - payload.lng) > 0.0005;
+  if (moved || !old.weather) {
+    saveBtn.textContent = 'Hämtar väder…';
+    payload.weather = await fetchWeatherSafe(payload.lat, payload.lng, payload.observed_at);
+  }
   saveBtn.textContent = 'Sparar…';
 
   // Ny art: spara den i listan så att alla får den som förslag

@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
   <section id="auth-view" class="auth-view" hidden>
     <div class="auth-col">
       <div class="hero">
-        <img class="hero-img" src="icons/hero-scene.svg?v=16"
+        <img class="hero-img" src="icons/hero-scene.svg?v=17"
              alt="Två jägare med gevär på ryggen går med en labrador och en beagle i granskogen i solnedgången">
         <div class="hero-scrim"></div>
         <!-- Appens namn fylls i från CONFIG.APP_NAME i config.js -->
@@ -209,6 +209,29 @@
         <ul id="report-list" class="report-list"></ul>
       </section>
 
+      <!-- Statistik -->
+      <section id="stats-view" class="view" hidden>
+        <div class="stats-top">
+          <p class="hint">Statistiken följer filtret. Tryck på en stapel för att filtrera på den.</p>
+          <div class="segmented" id="stats-metric">
+            <button type="button" data-metric="reports">Antal rapporter</button>
+            <button type="button" data-metric="animals">Antal djur</button>
+          </div>
+        </div>
+        <div id="stats-kpis" class="stats-kpis"></div>
+        <div id="stats-insights" class="stats-insights"></div>
+        <div class="stat-card stat-compare">
+          <h3>🔀 Jämför</h3>
+          <div class="compare-pick">
+            <label>Rader <select id="compare-rows"></select></label>
+            <label>Kolumner <select id="compare-cols"></select></label>
+          </div>
+          <div id="compare-table" class="compare-wrap"></div>
+        </div>
+        <div id="stats-cards" class="stats-cards"></div>
+        <p class="hint wx-credit">Väderdata: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0)</p>
+      </section>
+
       <!-- Riskanalys -->
       <section id="risk-view" class="view" hidden>
         <div class="risk-summary" id="risk-summary"></div>
@@ -238,9 +261,10 @@
     </main>
 
     <nav class="tabbar">
-      <button class="tab active" data-view="map-view">🗺️ Karta</button>
-      <button class="tab" data-view="list-view">📋 Lista</button>
-      <button class="tab" data-view="risk-view">⚠️ Risk</button>
+      <button class="tab active" data-view="map-view"><span class="tab-icon">🗺️</span>Karta</button>
+      <button class="tab" data-view="list-view"><span class="tab-icon">📋</span>Lista</button>
+      <button class="tab" data-view="risk-view"><span class="tab-icon">⚠️</span>Risk</button>
+      <button class="tab" data-view="stats-view"><span class="tab-icon">📊</span>Statistik</button>
     </nav>
 
     <!-- Rapportformulär (glider upp nedifrån) -->
@@ -294,7 +318,7 @@
 
   <!-- Riskrapport för en rapport -->
   <div id="risk-sheet" class="sheet" hidden>
-    <h2>Riskanalys</h2>
+    <h2>Händelse</h2>
     <div id="risk-content"></div>
 
     <label for="action-comment">Registrera åtgärd</label>
@@ -357,6 +381,15 @@
       <button type="button" data-type="olycka"><span data-triangle="🚗"></span> Olycka</button>
       <button type="button" data-type="birdstrike"><span data-triangle="✈️"></span> Strike</button>
     </div>
+
+    <label>Tid på dygnet</label>
+    <div class="chipset" id="filter-tod"></div>
+
+    <label>Ljus</label>
+    <div class="chipset" id="filter-light"></div>
+
+    <label>Väder <small class="hint">(välj en eller flera – alla måste stämma)</small></label>
+    <div class="chipset" id="filter-wx"></div>
 
     <label for="filter-reporter">Rapportör</label>
     <select id="filter-reporter"></select>
@@ -456,9 +489,10 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=16"></script>
-  <script src="species.js?v=16"></script>
-  <script src="risk.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="config.js?v=17"></script>
+  <script src="species.js?v=17"></script>
+  <script src="risk.js?v=17"></script>
+  <script src="weather.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>

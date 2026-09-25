@@ -30,6 +30,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `app.js` | All logik: auth, karta, CRUD, filter/sortering, artförslag |
 | `config.js` | Supabase-URL, publishable-nyckel, kartans centrum och zoom |
 | `risk.js` | `window.RISK`: alla riskinställningar (allvarlighet per grupp/art, zonfaktorer, flock, nivåer, åtgärder, zontyper) + geometri och `RISK.assess()` |
+| `weather.js` | `window.WEATHER`: väder från Open-Meteo, gränser för vädermarkörer (`LIMITS`, `TAGS`), ljus (solhöjd), tid på dygnet, `fetchFor()`, `analyze()` |
 | `species.js` | `SPECIES_GROUPS` (grupp → etikett + emoji-ikon, ev. `fallback`) och `SPECIES` (`[namn, grupp]`, ca 300 arter) |
 | `icons/hero-scene.svg` | Startsidans illustration från Claude Design (viewBox 480×440, `xMidYMax slice`). Används som den är. Himlens gradient ligger på `.hero` i CSS |
 | `sw.js` | Service worker. Egna filer: network-first. CDN: cache-first. Supabase och kartbilder cachas inte |
@@ -37,10 +38,11 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `supabase.sql` | Tabell, trigger och RLS-policies. Klistras in i Supabase SQL Editor |
 
 ## Databas (`public.reports`)
-`id, user_id, reporter_email, report_type, species, animal_count, observed_at, comment, lat, lng, created_at, updated_at`
+`id, user_id, reporter_email, report_type, species, animal_count, observed_at, comment, lat, lng, weather, created_at, updated_at`
 - `report_type`: `observation` (standard), `olycka` (fordon) eller `birdstrike` (flygplan). Check-constraint i SQL.
 - Trigger `reports_set_owner` sätter `user_id` och `reporter_email` från den
   inloggades JWT vid insert och låser dem vid update. Appen skickar dem aldrig.
+- `weather` (jsonb) = väder för timmen och 4 h före. Fylls vid sparande, eller i efterhand via `set_report_weather()` (bara om tom). Ändrat väder ändrar inte `updated_at`.
 - RLS är på. Medlemmar (`is_member()`): select alla, insert egna. Update/delete: ägaren eller admin (`is_admin()`). `anon`: ingen åtkomst.
 
 ## Tema och utseende
@@ -100,6 +102,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 ## Export till Excel
 - ⚙️ → "Exportera till Excel": Allt eller det filtret visar. SheetJS (`xlsx@0.18.5` från jsdelivr) laddas först vid export (`loadScript`).
 - Flikar: Rapporter (32 kolumner inkl. riskdata, status, kartlänk), Åtgärder, Sammanfattning, Per djurslag, Riskzoner, Riskinställningar.
+- Väderkolumner (`weatherColumns()`) i Rapporter och fliken "Väder per timme" (5 rader per rapport).
 - Datum skrivs som Excel-datum (`yyyy-mm-dd hh:mm`, webbläsarens lokala tid). Saknade värden blir tomma (`xlDate`).
 
 ## Rapporttyper
@@ -124,6 +127,24 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   `reporter` (''/'me'/user_id), `quick` (''/'today'/'7'/'30'), `from`, `to`, `sort`. Ändra alltid via `setFilter()`.
 - Smarta djurfältet: `animalOptions(q)` ger "Alla däggdjur/fåglar" först, sedan grupper, sedan arter.
 - Aktiva filter visas som etiketter (`.chip`) med ✕.
+- Väderfilter: `tod` (tid på dygnet), `light` (natt/gryning/dag/skymning), `wx` (lista med vädermarkörer, alla måste stämma).
+  Knapparna (`.chipset`) byggs från `WEATHER.TIME_OF_DAY/LIGHT/TAGS`. Rapporter utan väder faller bort när `wx` är valt.
+
+## Väder, ljus och tid på dygnet
+- `weather.js`: Open-Meteo (gratis, ingen nyckel). Forecast-API för rapporter < 80 dagar, annars archive-API (saknar sikt).
+  Sparas som `{v, src, lat, lng, fetched, hours:[5 timmar: −4 … 0]}` i `reports.weather`.
+- Hämtas när en rapport sparas (ny, flyttad, ny tid eller väder saknas). `backfillWeather()` fyller i gamla rapporter (max 40 per laddning) via rpc `set_report_weather`.
+- `WEATHER.analyze()` ger vädermarkörer (`TAGS`): regnar, har regnat, snö, soligt, mulet, dimma, lugnt, blåsigt, mycket blåsigt, minusgrader, varmt, åska, tryckfall, väderomslag. Gränser i `WEATHER.LIMITS`.
+- Ljus räknas lokalt från solhöjd (`sunAltitude`): dag ≥ −0.833°, natt < −6°, annars gryning/skymning. Tid på dygnet (`TIME_OF_DAY`) i svensk tid.
+- `contextOf(r)` i app.js (cachad) ger `{light, sunAlt, tod, wx}`. Väder visas som en rad (`weatherLine`) och fällbart i rutan "Händelse" (`weatherDetailsHtml`).
+- **Licens:** Open-Meteos gratis-API är för icke-kommersiellt bruk. Alternativ: SMHI:s öppna data (CC BY).
+
+## Statistik
+- Fliken "📊 Statistik" (`#stats-view`), följer filtret. `renderStats()`: nyckeltal, "insikter", stapelkort, jämförtabell (`renderCompare`, värmekarta).
+- Grupperingar i `STAT_DIMS` (art, djurtyp, grupp, tid på dygnet, ljus, timme, väder, vädermarkörer, temperatur, vind, veckodag, månad, typ, zon, risknivå, rapportör).
+  Ordningen på korten i `STAT_CARDS`. Klick på en stapel sätter motsvarande filter. Val sparas i `localStorage` (`viltrapport-stats`).
+- **Stående önskemål från användaren:** när vi bygger nya funktioner, lägg också till nya bra filter och grupperingar
+  i statistiken (`STAT_DIMS`/`STAT_CARDS`, och vid behov i filtret). Föreslå dem gärna.
 
 ## Inloggning
 - Konton skapas i appen med inbjudningskod. Admin kan också skapa användare i Supabase

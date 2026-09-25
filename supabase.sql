@@ -32,6 +32,12 @@ alter table public.reports drop constraint if exists reports_report_type_check;
 alter table public.reports add constraint reports_report_type_check
   check (report_type in ('observation', 'olycka', 'birdstrike'));
 
+-- Väder när djuret sågs (ögonblicksbild + timmarna före), hämtas av appen
+alter table public.reports add column if not exists weather jsonb;
+alter table public.reports drop constraint if exists reports_weather_check;
+alter table public.reports add constraint reports_weather_check
+  check (weather is null or (jsonb_typeof(weather) = 'object' and octet_length(weather::text) < 20000));
+
 -- Profiler: en rad per användare (färg, medlem, admin)
 create table if not exists public.profiles (
   user_id    uuid primary key default auth.uid()
@@ -159,7 +165,13 @@ begin
     new.reporter_email := old.reporter_email;
     new.created_at     := old.created_at;
   end if;
-  new.updated_at := now();
+  -- Bara väder ifyllt i efterhand räknas inte som en ändring av rapporten
+  if tg_op = 'UPDATE'
+     and (to_jsonb(new) - 'weather' - 'updated_at') = (to_jsonb(old) - 'weather' - 'updated_at') then
+    new.updated_at := old.updated_at;
+  else
+    new.updated_at := now();
+  end if;
   return new;
 end;
 $$;
@@ -267,6 +279,19 @@ end;
 $$;
 
 -- Admin: gör någon till admin eller ta bort admin
+-- Fyll i väder på en rapport som saknar det (vilken medlem som helst, bara om det är tomt)
+create or replace function public.set_report_weather(p_report_id bigint, p_weather jsonb)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.is_member() then return false; end if;
+  if p_weather is null or jsonb_typeof(p_weather) <> 'object' or octet_length(p_weather::text) >= 20000 then
+    return false;
+  end if;
+  update public.reports set weather = p_weather where id = p_report_id and weather is null;
+  return found;
+end;
+$$;
+
 -- Admin: ändra någons namn (vanliga användare ändrar sitt eget direkt i profiles)
 create or replace function public.set_full_name(target uuid, new_name text)
 returns void language plpgsql security definer set search_path = '' as $$
@@ -450,5 +475,7 @@ grant execute on function public.redeem_signup_code(text) to authenticated;
 grant execute on function public.set_signup_code(text) to authenticated;
 grant execute on function public.set_admin(uuid, boolean) to authenticated;
 grant execute on function public.set_full_name(uuid, text) to authenticated;
+revoke execute on function public.set_report_weather(bigint, jsonb) from public, anon;
+grant execute on function public.set_report_weather(bigint, jsonb) to authenticated;
 grant execute on function public.is_member() to authenticated;
 grant execute on function public.is_admin() to authenticated;
