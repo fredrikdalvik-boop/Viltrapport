@@ -1110,3 +1110,24 @@ button.bar-row:hover .bar-track { background: var(--border-soft); }
 label.check { display: flex; align-items: center; gap: 10px; font-weight: 600; margin: 0; cursor: pointer; }
 label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--green); }
 .obs-fields { font-size: 13px; color: var(--muted); }
+
+/* Fler arter i samma observation */
+#extra-species { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+#extra-species:empty { display: none; }
+.extra-species {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+}
+.extra-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.extra-remove {
+  border: none; background: none; color: var(--red);
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; padding: 6px 4px;
+}
+.extra-species .new-species { margin-top: 0; }
+.extra-bird { display: flex; flex-direction: column; gap: 8px; }
+.add-species { margin-top: 12px; }

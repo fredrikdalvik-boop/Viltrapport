@@ -206,6 +206,151 @@ $('is-flock').addEventListener('change', () => {
 });
 $('category').addEventListener('change', updateBirdFields);
 
+// ---------- Fler arter i samma observation ----------
+// Varje extra art blir en egen rapport med samma plats, tid, biotop, väder och kommentar.
+// Rapporterna får samma sighting_id så att de hör ihop.
+
+let extraSeq = 0;
+
+function fillSpeciesDatalist() {
+  $('species-datalist').innerHTML = [...speciesIndex().values()].map((sp) => `<option value="${escapeHtml(sp.name)}">`).join('');
+}
+
+function addExtraSpecies() {
+  fillSpeciesDatalist();
+  const row = document.createElement('div');
+  row.className = 'extra-species';
+  row.dataset.extra = ++extraSeq;
+  row.innerHTML = `
+    <div class="extra-head">
+      <strong class="extra-title"></strong>
+      <button type="button" class="extra-remove" aria-label="Ta bort arten">✕ Ta bort</button>
+    </div>
+    <input type="text" class="extra-name" list="species-datalist" autocomplete="off" maxlength="100"
+           placeholder="Art, t.ex. Fälthare" aria-label="Art">
+    <div class="extra-category new-species" hidden>
+      <label>Ny art! Vilken sorts djur är det?</label>
+      <select>${$('category').innerHTML}</select>
+    </div>
+    <div class="extra-bird" hidden>
+      <label class="check"><input type="checkbox" class="extra-flock"> 🐦🐦🐦 Flock – antalet är okänt</label>
+      <div class="chipset extra-position">${Object.entries(window.BIRD_POSITIONS).map(([k, t]) =>
+        `<button type="button" data-xposition="${k}">${t.icon} ${t.label}</button>`).join('')}</div>
+    </div>
+    <div class="stepper">
+      <button type="button" class="btn btn-secondary" data-xstep="-1" aria-label="Minska">−</button>
+      <input class="extra-count" type="number" inputmode="numeric" min="1" max="10000" value="1" aria-label="Antal">
+      <button type="button" class="btn btn-secondary" data-xstep="1" aria-label="Öka">+</button>
+    </div>`;
+  $('extra-species').append(row);
+  numberExtras();
+  updateExtraRow(row);
+  row.querySelector('.extra-name').focus();
+}
+
+// "Art 2", "Art 3" … i ordning
+function numberExtras() {
+  [...$('extra-species').children].forEach((row, i) => { row.querySelector('.extra-title').textContent = `Art ${i + 2}`; });
+}
+
+function extraGroup(row) {
+  const name = row.querySelector('.extra-name').value.trim();
+  const known = findKnownSpecies(name);
+  return { name, known, group: known ? known.group : row.querySelector('.extra-category select').value };
+}
+
+// Visa gruppval för ny art och flock/läge för fåglar
+function updateExtraRow(row) {
+  const { name, known, group } = extraGroup(row);
+  row.querySelector('.extra-category').hidden = !name || Boolean(known);
+  const bird = window.SPECIES_GROUPS[group]?.kind === 'fagel';
+  row.querySelector('.extra-bird').hidden = !bird;
+  const count = row.querySelector('.extra-count');
+  count.placeholder = bird && row.querySelector('.extra-flock').checked ? 'ca antal' : '';
+}
+
+$('add-species').addEventListener('click', addExtraSpecies);
+$('extra-species').addEventListener('input', (e) => {
+  const row = e.target.closest('.extra-species');
+  if (row) updateExtraRow(row);
+});
+$('extra-species').addEventListener('change', (e) => {
+  const row = e.target.closest('.extra-species');
+  if (!row) return;
+  if (e.target.classList.contains('extra-flock')) {
+    const count = row.querySelector('.extra-count');
+    if (e.target.checked && count.value === '1') count.value = '';
+    if (!e.target.checked && !count.value) count.value = 1;
+  }
+  updateExtraRow(row);
+});
+$('extra-species').addEventListener('click', (e) => {
+  const row = e.target.closest('.extra-species');
+  if (!row) return;
+  if (e.target.closest('.extra-remove')) {
+    row.remove();
+    $('form-message').textContent = '';
+    numberExtras();
+    return;
+  }
+  const pos = e.target.closest('[data-xposition]');
+  if (pos) {
+    const was = pos.classList.contains('selected');
+    row.querySelectorAll('[data-xposition]').forEach((b) => b.classList.remove('selected'));
+    pos.classList.toggle('selected', !was);
+  }
+  const step = e.target.closest('[data-xstep]');
+  if (step) {
+    const input = row.querySelector('.extra-count');
+    const value = (parseInt(input.value, 10) || 0) + Number(step.dataset.xstep);
+    const flock = row.querySelector('.extra-flock').checked && !row.querySelector('.extra-bird').hidden;
+    input.value = value < 1 && flock ? '' : Math.min(10000, Math.max(1, value));
+  }
+});
+
+// Läser de extra arterna. Ger { list: [...] } eller { error, focus }.
+function collectExtras() {
+  const list = [];
+  for (const row of $('extra-species').children) {
+    const title = row.querySelector('.extra-title').textContent;
+    const { name, known, group } = extraGroup(row);
+    if (!name) return { error: `${title}: skriv vilken art, eller ta bort raden.`, focus: row.querySelector('.extra-name') };
+    if (!known && !group) return { error: `${title}: ny art – välj vilken sorts djur det är.`, focus: row.querySelector('.extra-category select') };
+    const bird = window.SPECIES_GROUPS[group]?.kind === 'fagel';
+    const flock = bird && row.querySelector('.extra-flock').checked;
+    const raw = row.querySelector('.extra-count').value.trim();
+    const count = raw === '' ? null : parseInt(raw, 10);
+    if (count === null ? !flock : !(count >= 1 && count <= 10000)) {
+      return { error: `${title}: fyll i antal (1–10 000)${bird ? ' eller kryssa i Flock' : ''}.`, focus: row.querySelector('.extra-count') };
+    }
+    list.push({
+      species: known ? known.name : name.charAt(0).toUpperCase() + name.slice(1),
+      newCategory: known ? null : group,
+      animal_count: count,
+      is_flock: flock,
+      bird_position: bird ? row.querySelector('[data-xposition].selected')?.dataset.xposition ?? null : null,
+    });
+  }
+  return { list };
+}
+
+// Sparar en ny art i listan så att alla får den som förslag
+async function saveCustomSpecies(name, category) {
+  if (findKnownSpecies(name)) return;
+  const { error } = await db.from('custom_species').insert({ name, category: category || 'ovrigt' });
+  // 23505 = arten finns redan (någon annan hann före) – det gör inget
+  if (error && error.code !== '23505') console.warn('Kunde inte spara ny art:', error.message);
+  if (!error) customSpecies.push({ name, category: category || 'ovrigt' });
+}
+
+function newSightingId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 // Snabbval när man inte ser exakt vilken art det är
 $('quick-picks').innerHTML = (window.QUICK_PICKS || []).map((name) =>
   `<button type="button" data-pick="${escapeHtml(name)}">${iconFor(name)} ${escapeHtml(name.replace(' (okänd art)', ''))}</button>`).join('');
@@ -248,6 +393,31 @@ function fieldsText(r) {
 function fieldsLine(r, tag = 'span') {
   const text = fieldsText(r);
   return text ? `<${tag} class="obs-fields">${escapeHtml(text)}</${tag}>` : '';
+}
+
+// Rapporter som hör till samma observation (samma sighting_id). Byggs om vid varje laddning.
+let sightingMap = null;
+function sightingGroup(r) {
+  if (!r.sighting_id) return [r];
+  if (!sightingMap) {
+    sightingMap = new Map();
+    for (const x of reports) {
+      if (!x.sighting_id) continue;
+      if (!sightingMap.has(x.sighting_id)) sightingMap.set(x.sighting_id, []);
+      sightingMap.get(x.sighting_id).push(x);
+    }
+    for (const list of sightingMap.values()) list.sort((a, b) => a.id - b.id);
+  }
+  return sightingMap.get(r.sighting_id) ?? [r];
+}
+function companions(r) {
+  return sightingGroup(r).filter((x) => x.id !== r.id);
+}
+function companionsLine(r, tag = 'span') {
+  const c = companions(r);
+  if (!c.length) return '';
+  return `<${tag} class="obs-fields">👥 Tillsammans med: ${c.map((x) =>
+    `${iconFor(x.species)} ${escapeHtml(x.species)} (${escapeHtml(countText(x))})`).join(', ')}</${tag}>`;
 }
 
 // Nål i rapportörens färg. Flock ritas som en hög med tre nålar.
@@ -999,6 +1169,16 @@ function removeDraftMarker() {
   }
 }
 
+// Flera arter på samma plats: nålarna läggs i en ring runt punkten så att alla syns
+function spreadAnchor(r) {
+  const group = sightingGroup(r);
+  const i = group.indexOf(r);
+  if (group.length < 2 || i < 0) return [14, 14];
+  const angle = (i / group.length) * 2 * Math.PI - Math.PI / 2;
+  const radius = 12 + group.length * 2;
+  return [14 - Math.round(Math.cos(angle) * radius), 14 - Math.round(Math.sin(angle) * radius)];
+}
+
 function renderMarkers(list) {
   if (!markerLayer) return;
   markerLayer.clearLayers();
@@ -1018,7 +1198,7 @@ function renderMarkers(list) {
         className: 'pin-wrap',
         html: pinHtml(r),
         iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        iconAnchor: spreadAnchor(r),
         popupAnchor: [0, -16],
       });
     // Olyckor och birdstrikes ligger överst så att de inte göms under vanliga nålar
@@ -1055,6 +1235,7 @@ function tooltipHtml(r) {
       ${typeBadge(r)}
       <strong>${iconFor(r.species)} ${escapeHtml(r.species)} (${countText(r)})</strong>
       ${fieldsLine(r)}
+      ${companionsLine(r)}
       <span>🕒 ${formatDateTime(r.observed_at)}</span>
       ${weatherLine(r)}
       <span><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</span>
@@ -1071,6 +1252,7 @@ function popupHtml(r) {
       ${typeBadge(r)}
       <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${countText(r)})</h3>
       ${fieldsLine(r, 'p')}
+      ${companionsLine(r, 'p')}
       <p>🕒 ${formatDateTime(r.observed_at)}</p>
       <p>${weatherLine(r)}</p>
       <p><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
@@ -1124,6 +1306,7 @@ async function loadReports() {
   drawRiskZones();
 
   reports = reportsResult.data;
+  sightingMap = null;
   updateFilterOptions();
   render();
   backfillWeather();
@@ -1147,6 +1330,7 @@ const EMPTY_FILTER = {
   flock: '',        // '' | 'ja' (bara flockar) | 'nej' (fåglar som inte är flock)
   position: '',     // fågelns läge: '' eller nyckel i BIRD_POSITIONS
   habitat: '',      // biotop: '' eller nyckel i HABITATS
+  multi: '',        // '' | 'ja' (flera arter på samma plats) | 'nej' (en art)
   sort: 'date-desc',
 };
 let filter = loadFilter();
@@ -1202,6 +1386,7 @@ function matchesFilter(r) {
   if (filter.flock === 'nej' && (r.is_flock || kindOf(r.species) !== 'fagel')) return false;
   if (filter.position && r.bird_position !== filter.position) return false;
   if (filter.habitat && r.habitat !== filter.habitat) return false;
+  if (filter.multi && (sightingGroup(r).length > 1) !== (filter.multi === 'ja')) return false;
   const a = filter.animal;
   if (a?.type === 'kind' && kindOf(r.species) !== a.value) return false;
   if (a?.type === 'group' && groupOf(r.species) !== a.value) return false;
@@ -1288,6 +1473,7 @@ function renderFilterBar(shown) {
   if (pos) chips.push(['position', `${pos.icon} ${pos.label}`]);
   const hab = window.HABITATS[filter.habitat];
   if (hab) chips.push(['habitat', `${hab.icon} ${hab.label}`]);
+  if (MULTI_OPTIONS[filter.multi]) chips.push(['multi', MULTI_OPTIONS[filter.multi]]);
 
   $('filter-chips').innerHTML = chips.map(([key, label, isHtml]) => `
     <button type="button" class="chip" data-clear="${key}" aria-label="Ta bort filtret">
@@ -1314,6 +1500,7 @@ $('filter-chips').addEventListener('click', (e) => {
   if (chip.dataset.clear === 'flock') setFilter({ flock: '' });
   if (chip.dataset.clear === 'position') setFilter({ position: '' });
   if (chip.dataset.clear === 'habitat') setFilter({ habitat: '' });
+  if (chip.dataset.clear === 'multi') setFilter({ multi: '' });
   if (chip.dataset.clear.startsWith('wx:')) setFilter({ wx: filter.wx.filter((t) => `wx:${t}` !== chip.dataset.clear) });
 });
 
@@ -1333,6 +1520,7 @@ function syncFilterForm() {
   document.querySelectorAll('#filter-flock [data-flock]').forEach((b) => b.classList.toggle('selected', b.dataset.flock === filter.flock));
   document.querySelectorAll('#filter-position [data-position]').forEach((b) => b.classList.toggle('selected', b.dataset.position === filter.position));
   document.querySelectorAll('#filter-habitat [data-habitat]').forEach((b) => b.classList.toggle('selected', b.dataset.habitat === filter.habitat));
+  document.querySelectorAll('#filter-multi [data-multi]').forEach((b) => b.classList.toggle('selected', b.dataset.multi === filter.multi));
   document.querySelectorAll('#filter-quick [data-quick]').forEach((b) => {
     b.classList.toggle('selected', b.dataset.quick === filter.quick && (filter.quick || (!filter.from && !filter.to)));
   });
@@ -1394,7 +1582,10 @@ $('filter-position').innerHTML = '<button type="button" data-position="">Alla</b
   Object.entries(window.BIRD_POSITIONS).map(([k, t]) => `<button type="button" data-position="${k}">${t.icon} ${t.label}</button>`).join('');
 $('filter-habitat').innerHTML = '<button type="button" data-habitat="">Alla</button>' +
   Object.entries(window.HABITATS).map(([k, t]) => `<button type="button" data-habitat="${k}">${t.icon} ${t.label}</button>`).join('');
-for (const key of ['flock', 'position', 'habitat']) {
+const MULTI_OPTIONS = { ja: '👥 Flera arter samtidigt', nej: '🐾 En art' };
+$('filter-multi').innerHTML = '<button type="button" data-multi="">Alla</button>' +
+  Object.entries(MULTI_OPTIONS).map(([k, label]) => `<button type="button" data-multi="${k}">${label}</button>`).join('');
+for (const key of ['flock', 'position', 'habitat', 'multi']) {
   $(`filter-${key}`).addEventListener('click', (e) => {
     const b = e.target.closest(`[data-${key}]`);
     if (b) setFilter({ [key]: b.dataset[key] });
@@ -1552,6 +1743,7 @@ function renderList(list) {
         <h3><span class="card-icon${r.is_flock ? ' pin-flock' : ''}" style="background:${colorFor(r.user_id)};--c:${colorFor(r.user_id)}">${iconFor(r.species)}</span>
             ${escapeHtml(r.species)} (${countText(r)})</h3>
         ${fieldsLine(r, 'p')}
+        ${companionsLine(r, 'p')}
         <p>🕒 ${formatDateTime(r.observed_at)}</p>
         <p>${weatherLine(r)}</p>
         <p>👤 ${escapeHtml(nameFor(r.user_id, r.reporter_email))}${own ? ' (du)' : ''}</p>
@@ -1748,11 +1940,17 @@ const STAT_DIMS = {
   flock:     { label: 'Flock eller inte (fåglar)', icon: '🐦', onlyIf: (r) => kindOf(r.species) === 'fagel',
     key: (r) => (r.is_flock ? 'ja' : 'nej'), order: ['ja', 'nej'],
     name: (k) => ({ ja: '🐦🐦🐦 Flock', nej: '🐦 Inte flock' })[k], filter: (k) => ({ flock: k }) },
+  together:  { label: 'Sågs tillsammans med', icon: '👥', top: 12, note: 'arter på samma plats och tid',
+    onlyIf: (r) => sightingGroup(r).length > 1, keys: (r) => [...new Set(companions(r).map((x) => x.species))],
+    name: (k) => `${iconFor(k)} ${k}` },
+  multi:     { label: 'Antal arter samtidigt', icon: '👥', key: (r) => { const n = sightingGroup(r).length; return n >= 4 ? '4 eller fler' : `${n}`; },
+    order: ['1', '2', '3', '4 eller fler'], name: (k) => (k === '1' ? '1 art' : `${k} arter`),
+    filter: (k) => ({ multi: k === '1' ? 'nej' : 'ja' }) },
   count:     { label: 'Antal djur per rapport', icon: '🔢', key: countBand, order: COUNT_BANDS.map((b) => b.label), name: (k) => k },
   reporter:  { label: 'Rapportör', icon: '👤', top: 12, key: (r) => r.user_id, name: (k) => nameFor(k), filter: (k) => ({ reporter: k }) },
 };
 // Korten som visas (i den här ordningen)
-const STAT_CARDS = ['species', 'kind', 'habitat', 'position', 'flock', 'count', 'tod', 'light', 'condition', 'wxtag', 'temp', 'wind', 'hour', 'weekday', 'month', 'type', 'zone', 'level', 'group', 'reporter'];
+const STAT_CARDS = ['species', 'kind', 'habitat', 'position', 'flock', 'count', 'multi', 'together', 'tod', 'light', 'condition', 'wxtag', 'temp', 'wind', 'hour', 'weekday', 'month', 'type', 'zone', 'level', 'group', 'reporter'];
 
 const STATS_KEY = 'viltrapport-stats';
 let statsPrefs = (() => {
@@ -2394,6 +2592,9 @@ async function exportExcel(onlyFiltered) {
       'Flock': r.is_flock ? 'Ja' : kindOf(r.species) === 'fagel' ? 'Nej' : '',
       'Fågelns läge': window.BIRD_POSITIONS[r.bird_position]?.label ?? '',
       'Biotop': window.HABITATS[r.habitat]?.label ?? '',
+      'Observation (id)': r.sighting_id ? r.sighting_id.slice(0, 8) : '',
+      'Arter samtidigt': sightingGroup(r).length,
+      'Tillsammans med': companions(r).map((x) => `${x.species} (${countText(x)})`).join(', '),
       'Rapportör': nameFor(r.user_id, r.reporter_email),
       'Rapportörens e-post': r.reporter_email,
       'Kommentar': r.comment ?? '',
@@ -2720,6 +2921,7 @@ function openSheet(report = null) {
   selectedHabitat = report?.habitat ?? '';
   renderChoiceChips();
   $('quick-picks-wrap').open = false;
+  $('extra-species').innerHTML = '';
   $('observed-at').value = toLocalInput(report?.observed_at ?? new Date());
   $('comment').value = report?.comment ?? '';
   $('form-message').textContent = '';
@@ -2793,6 +2995,13 @@ $('report-form').addEventListener('submit', async (e) => {
     return;
   }
 
+  const extras = collectExtras();
+  if (extras.error) {
+    message.textContent = extras.error;
+    extras.focus?.focus();
+    return;
+  }
+
   const position = draftMarker.getLatLng();
   const payload = {
     report_type: selectedType,
@@ -2821,19 +3030,30 @@ $('report-form').addEventListener('submit', async (e) => {
   }
   saveBtn.textContent = 'Sparar…';
 
-  // Ny art: spara den i listan så att alla får den som förslag
-  if (!known) {
-    const category = $('category').value || 'ovrigt';
-    const { error: speciesError } = await db.from('custom_species').insert({ name: speciesName, category });
-    // 23505 = arten finns redan (någon annan hann före) – det gör inget
-    if (speciesError && speciesError.code !== '23505') console.warn('Kunde inte spara ny art:', speciesError.message);
-    if (!speciesError) customSpecies.push({ name: speciesName, category });
+  // Nya arter: spara dem i listan så att alla får dem som förslag
+  if (!known) await saveCustomSpecies(speciesName, $('category').value);
+  for (const x of extras.list) if (x.newCategory) await saveCustomSpecies(x.species, x.newCategory);
+
+  // Fler arter: egna rapporter med samma plats, tid, biotop, väder och kommentar
+  let extraRows = [];
+  if (extras.list.length) {
+    payload.sighting_id = old?.sighting_id ?? newSightingId();
+    const shared = {
+      report_type: payload.report_type, observed_at: payload.observed_at, comment: payload.comment,
+      lat: payload.lat, lng: payload.lng, habitat: payload.habitat,
+      weather: 'weather' in payload ? payload.weather : old?.weather ?? null,
+      sighting_id: payload.sighting_id,
+    };
+    extraRows = extras.list.map(({ newCategory, ...x }) => ({ ...shared, ...x }));
   }
 
-  const query = editingId
-    ? db.from('reports').update(payload).eq('id', editingId)
-    : db.from('reports').insert(payload);
-  const { error } = await query;
+  let error;
+  if (editingId) {
+    ({ error } = await db.from('reports').update(payload).eq('id', editingId));
+    if (!error && extraRows.length) ({ error } = await db.from('reports').insert(extraRows));
+  } else {
+    ({ error } = await db.from('reports').insert(extraRows.length ? [payload, ...extraRows] : payload));
+  }
 
   saveBtn.disabled = false;
   saveBtn.textContent = 'Spara';
@@ -2842,8 +3062,10 @@ $('report-form').addEventListener('submit', async (e) => {
     message.textContent = translateError(error);
     return;
   }
-  showToast(editingId ? 'Rapporten är uppdaterad'
-    : selectedType === 'observation' ? 'Rapporten är sparad' : `${REPORT_TYPES[selectedType].label} sparad`);
+  const total = extraRows.length + 1;
+  showToast(extraRows.length ? `${editingId ? 'Uppdaterad och sparad' : 'Sparad'}: ${total} arter på samma plats`
+    : editingId ? 'Rapporten är uppdaterad'
+      : selectedType === 'observation' ? 'Rapporten är sparad' : `${REPORT_TYPES[selectedType].label} sparad`);
   closeSheet();
   loadReports();
 });

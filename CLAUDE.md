@@ -38,12 +38,13 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `supabase.sql` | Tabell, trigger och RLS-policies. Klistras in i Supabase SQL Editor |
 
 ## Databas (`public.reports`)
-`id, user_id, reporter_email, report_type, species, animal_count, is_flock, bird_position, habitat, observed_at, comment, lat, lng, weather, created_at, updated_at`
+`id, user_id, reporter_email, report_type, species, animal_count, is_flock, bird_position, habitat, sighting_id, observed_at, comment, lat, lng, weather, created_at, updated_at`
 - `report_type`: `observation` (standard), `olycka` (fordon) eller `birdstrike` (flygplan). Check-constraint i SQL.
 - Trigger `reports_set_owner` sätter `user_id` och `reporter_email` från den
   inloggades JWT vid insert och låser dem vid update. Appen skickar dem aldrig.
 - `is_flock` (fåglar): flock. Då får `animal_count` vara tomt (check: antal eller flock). `bird_position`: luft/mark/sitter/vatten (bara fåglar).
   `habitat`: biotop (nycklar i `HABITATS`). Nycklarna finns också i check-constraints i `supabase.sql` – ändra båda.
+- `sighting_id` (uuid): flera arter på samma plats och tid ("➕ Lägg till fler arter"). Varje art är en egen rapport med samma sighting_id.
 - `weather` (jsonb) = väder för timmen och 4 h före. Fylls vid sparande, eller i efterhand via `set_report_weather()` (bara om tom). Ändrat väder ändrar inte `updated_at`.
 - RLS är på. Medlemmar (`is_member()`): select alla, insert egna. Update/delete: ägaren eller admin (`is_admin()`). `anon`: ingen åtkomst.
 
@@ -85,6 +86,9 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Obestämda arter (t.ex. "Kråkfågel (okänd art)") finns i `SPECIES`. `QUICK_PICKS` visas som knappar under "Osäker på arten?" i formuläret.
 - Flock ritas som en hög med tre nålar (`.pin-flock`, box-shadow med färgen `--c`). `pinHtml(r)` bygger nålen.
 - Formuläret: flock och "Var är fågeln?" visas bara för fåglar (`formIsBird()`/`updateBirdFields()`). Biotop för alla. Tryck igen för att avmarkera.
+- **Fler arter:** knappen `#add-species` lägger till rader i `#extra-species` (`addExtraSpecies()`, `collectExtras()`). Egen art, antal, flock och läge per rad;
+  plats, tid, typ, biotop, väder och kommentar ärvs. Sparas som flera rader i en insert. Vid redigering läggs nya arter till i samma observation.
+  `sightingGroup(r)`/`companions(r)` (cache `sightingMap`, nollställs i `loadReports`). Nålarna sprids i en ring (`spreadAnchor`). "👥 Tillsammans med" visas i ruta/lista.
 - Texter: `countText(r)` ("3 st", "flock", "flock, ca 40"), `fieldsText(r)` (läge + biotop).
 
 ## Riskanalys
@@ -136,7 +140,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Aktiva filter visas som etiketter (`.chip`) med ✕.
 - Väderfilter: `tod` (tid på dygnet), `light` (natt/gryning/dag/skymning), `wx` (lista med vädermarkörer, alla måste stämma).
   Knapparna (`.chipset`) byggs från `WEATHER.TIME_OF_DAY/LIGHT/TAGS`. Rapporter utan väder faller bort när `wx` är valt.
-- `flock` (''/'ja'/'nej'), `position` (fågelns läge), `habitat` (biotop).
+- `flock` (''/'ja'/'nej'), `position` (fågelns läge), `habitat` (biotop), `multi` (''/'ja'/'nej' = flera arter samtidigt).
 
 ## Väder, ljus och tid på dygnet
 - `weather.js`: Open-Meteo (gratis, ingen nyckel). Forecast-API för rapporter < 80 dagar, annars archive-API (saknar sikt).
@@ -149,7 +153,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 
 ## Statistik
 - Fliken "📊 Statistik" (`#stats-view`), följer filtret. `renderStats()`: nyckeltal, "insikter", stapelkort, jämförtabell (`renderCompare`, värmekarta).
-- Grupperingar i `STAT_DIMS` (art, djurtyp, grupp, biotop, fågelns läge, flock, antal per rapport, tid på dygnet, ljus, timme, väder, vädermarkörer, temperatur, vind, veckodag, månad, typ, zon, risknivå, rapportör).
+- Grupperingar i `STAT_DIMS` (art, djurtyp, grupp, biotop, fågelns läge, flock, antal per rapport, antal arter samtidigt, sågs tillsammans med, tid på dygnet, ljus, timme, väder, vädermarkörer, temperatur, vind, veckodag, månad, typ, zon, risknivå, rapportör).
   `onlyIf(r)` = räkna bara vissa rapporter (t.ex. bara fåglar), `missing` = text när värdet saknas.
   Ordningen på korten i `STAT_CARDS`. Klick på en stapel sätter motsvarande filter. Val sparas i `localStorage` (`viltrapport-stats`).
 - **Stående önskemål från användaren:** när vi bygger nya funktioner, lägg också till nya bra filter och grupperingar

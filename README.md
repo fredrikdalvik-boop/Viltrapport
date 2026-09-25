@@ -10,6 +10,7 @@ sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
    - Osäker på arten? Tryck på **Osäker på arten? Välj en grupp** (t.ex. Kråkfågel, Rovfågel, Hjortdjur).
    - Fåglar: kryssa i **Flock** om du inte vet antalet, och välj om fågeln är i luften, på marken osv.
    - **Biotop:** välj miljön (vatten, våtmark, kort/långt gräs, sly, skog …).
+   - Flera arter på samma plats? Tryck **➕ Lägg till fler arter**. Plats, tid, biotop, väder och kommentar gäller för alla.
    - Varje nål har rapportörens färg och en ikon för djurslaget. En flock visas som en hög med tre nålar.
    - Välj din egen färg under ⚙️ (uppe till höger).
    - Knappen uppe till höger byter mellan karta och satellitbild.

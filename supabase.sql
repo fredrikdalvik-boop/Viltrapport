@@ -58,6 +58,10 @@ alter table public.reports add constraint reports_habitat_check
   check (habitat is null or habitat in ('vatten', 'vatmark', 'kort_gras', 'langt_gras', 'aker',
                                         'sly', 'skog', 'hardgjort', 'bebyggelse'));
 
+-- Flera arter på samma plats och tid: rapporterna får samma sighting_id
+alter table public.reports add column if not exists sighting_id uuid;
+create index if not exists reports_sighting_id_idx on public.reports (sighting_id) where sighting_id is not null;
+
 -- Profiler: en rad per användare (färg, medlem, admin)
 create table if not exists public.profiles (
   user_id    uuid primary key default auth.uid()
