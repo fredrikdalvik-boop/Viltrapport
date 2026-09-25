@@ -650,6 +650,15 @@ main { flex: 1; position: relative; overflow: hidden; }
 .leaflet-marker-icon:hover .tri,
 .marker-active .tri { transform: scale(1.45); }
 
+/* Flock: två nålar till bakom, som en hög (färgen kommer från --c) */
+.pin-flock {
+  box-shadow:
+    -7px -6px 0 -2px var(--c), -7px -6px 0 0 #fff,
+    7px -6px 0 -2px var(--c), 7px -6px 0 0 #fff,
+    0 1px 4px rgba(0,0,0,0.45);
+}
+.card-icon.pin-flock { border: 2px solid #fff; margin: 6px 0 0 7px; }
+
 /* Informationsrutan vid musen */
 .leaflet-tooltip.report-tip {
   padding: 8px 10px;
@@ -1092,3 +1101,12 @@ button.bar-row:hover .bar-track { background: var(--border-soft); }
 .compare-table td { text-align: center; padding: 5px 4px; border-radius: 4px; font-variant-numeric: tabular-nums; min-width: 34px; }
 .compare-table td.total, .compare-table th.total { font-weight: 700; color: var(--text); }
 @media (min-width: 800px) { .stats-cards { grid-template-columns: 1fr 1fr; } #stats-view { max-width: 1000px; margin: 0 auto; } }
+
+/* Formulär: snabbval, flock, läge och biotop */
+.quick-picks { margin-top: 6px; }
+.quick-picks summary { cursor: pointer; color: var(--green-ink); font-size: 14px; font-weight: 600; padding: 4px 0; }
+.quick-picks .chipset { margin-top: 6px; }
+.flock-toggle { margin-top: 10px; }
+label.check { display: flex; align-items: center; gap: 10px; font-weight: 600; margin: 0; cursor: pointer; }
+label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--green); }
+.obs-fields { font-size: 13px; color: var(--muted); }

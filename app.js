@@ -151,12 +151,109 @@ function updateCategoryVisibility() {
   const isNew = value.length > 0 && !findKnownSpecies(value) && $('species-suggestions').hidden;
   $('category-wrap').hidden = !isNew;
   $('category').required = isNew;
+  updateBirdFields();
 }
+
+// ---------- Flock, fågelns läge och biotop i formuläret ----------
+
+let selectedPosition = '';
+let selectedHabitat = '';
+
+// Är det valda djuret en fågel? (känd art, eller ny art med vald fågelgrupp)
+function formIsBird() {
+  const known = findKnownSpecies($('species').value.trim());
+  const group = known ? known.group : $('category').value;
+  return window.SPECIES_GROUPS[group]?.kind === 'fagel';
+}
+
+// Flock och läge visas bara för fåglar. Vid flock behövs inget antal.
+function updateBirdFields() {
+  const bird = formIsBird();
+  $('flock-wrap').hidden = !bird;
+  $('position-wrap').hidden = !bird;
+  const flock = bird && $('is-flock').checked;
+  $('animal-count').required = !flock;
+  $('animal-count').placeholder = flock ? 'ca antal' : '';
+  $('count-label').textContent = flock ? 'Ungefärligt antal (valfritt)' : 'Antal';
+}
+
+function renderChoiceChips() {
+  $('bird-position').innerHTML = Object.entries(window.BIRD_POSITIONS).map(([k, t]) =>
+    `<button type="button" data-position="${k}" class="${k === selectedPosition ? 'selected' : ''}">${t.icon} ${t.label}</button>`).join('');
+  $('habitat').innerHTML = Object.entries(window.HABITATS).map(([k, t]) =>
+    `<button type="button" data-habitat="${k}" class="${k === selectedHabitat ? 'selected' : ''}">${t.icon} ${t.label}</button>`).join('');
+}
+
+// Tryck igen på ett valt alternativ för att ta bort valet
+$('bird-position').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-position]');
+  if (!b) return;
+  selectedPosition = selectedPosition === b.dataset.position ? '' : b.dataset.position;
+  renderChoiceChips();
+});
+$('habitat').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-habitat]');
+  if (!b) return;
+  selectedHabitat = selectedHabitat === b.dataset.habitat ? '' : b.dataset.habitat;
+  renderChoiceChips();
+});
+
+$('is-flock').addEventListener('change', () => {
+  // Flock: töm antalet "1" så att man inte råkar spara en flock med 1 djur
+  if ($('is-flock').checked && $('animal-count').value === '1') $('animal-count').value = '';
+  if (!$('is-flock').checked && !$('animal-count').value) $('animal-count').value = 1;
+  updateBirdFields();
+});
+$('category').addEventListener('change', updateBirdFields);
+
+// Snabbval när man inte ser exakt vilken art det är
+$('quick-picks').innerHTML = (window.QUICK_PICKS || []).map((name) =>
+  `<button type="button" data-pick="${escapeHtml(name)}">${iconFor(name)} ${escapeHtml(name.replace(' (okänd art)', ''))}</button>`).join('');
+$('quick-picks').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pick]');
+  if (!b) return;
+  $('species').value = b.dataset.pick;
+  hideSuggestions();
+  $('quick-picks-wrap').open = false;
+});
 
 // Namnet som visas för en användare: för- och efternamn om det finns, annars e-posten
 function nameFor(userId, fallbackEmail) {
   const p = profiles.find((x) => x.user_id === userId);
   return p?.full_name || p?.email || fallbackEmail || 'okänd';
+}
+
+// ---------- Antal, flock, läge och biotop ----------
+
+// "3 st", "flock" eller "flock, ca 40"
+function countText(r) {
+  if (r.is_flock) return r.animal_count ? `flock, ca ${r.animal_count}` : 'flock';
+  return `${r.animal_count ?? 1} st`;
+}
+
+// Antal som risken räknar med (flock utan antal = RISK.FLOCK_UNKNOWN_COUNT)
+function riskCount(r) {
+  return r.animal_count ?? (r.is_flock ? RISK.FLOCK_UNKNOWN_COUNT : 1);
+}
+
+// Fågelns läge och biotop, t.ex. "☁️ I luften · 🌾 Långt gräs"
+function fieldsText(r) {
+  const parts = [];
+  const pos = window.BIRD_POSITIONS[r.bird_position];
+  const hab = window.HABITATS[r.habitat];
+  if (pos) parts.push(`${pos.icon} ${pos.label}`);
+  if (hab) parts.push(`${hab.icon} ${hab.label}`);
+  return parts.join(' · ');
+}
+function fieldsLine(r, tag = 'span') {
+  const text = fieldsText(r);
+  return text ? `<${tag} class="obs-fields">${escapeHtml(text)}</${tag}>` : '';
+}
+
+// Nål i rapportörens färg. Flock ritas som en hög med tre nålar.
+function pinHtml(r) {
+  const c = colorFor(r.user_id);
+  return `<div class="pin${r.is_flock ? ' pin-flock' : ''}" style="background:${c};--c:${c}">${iconFor(r.species)}</div>`;
 }
 
 // Får den inloggade ändra/ta bort rapporten?
@@ -919,7 +1016,7 @@ function renderMarkers(list) {
       })
       : L.divIcon({
         className: 'pin-wrap',
-        html: `<div class="pin" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</div>`,
+        html: pinHtml(r),
         iconSize: [28, 28],
         iconAnchor: [14, 14],
         popupAnchor: [0, -16],
@@ -956,7 +1053,8 @@ function tooltipHtml(r) {
   return `
     <div class="tip">
       ${typeBadge(r)}
-      <strong>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</strong>
+      <strong>${iconFor(r.species)} ${escapeHtml(r.species)} (${countText(r)})</strong>
+      ${fieldsLine(r)}
       <span>🕒 ${formatDateTime(r.observed_at)}</span>
       ${weatherLine(r)}
       <span><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</span>
@@ -971,7 +1069,8 @@ function popupHtml(r) {
   return `
     <div class="popup">
       ${typeBadge(r)}
-      <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
+      <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${countText(r)})</h3>
+      ${fieldsLine(r, 'p')}
       <p>🕒 ${formatDateTime(r.observed_at)}</p>
       <p>${weatherLine(r)}</p>
       <p><span style="color:${colorFor(r.user_id)}">●</span> ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
@@ -1045,6 +1144,9 @@ const EMPTY_FILTER = {
   tod: '',          // tid på dygnet: '' eller WEATHER.TIME_OF_DAY[].key
   light: '',        // ljus: '' | 'natt' | 'gryning' | 'dag' | 'skymning'
   wx: [],           // vädermarkörer som alla måste stämma, t.ex. ['regnat', 'blasigt']
+  flock: '',        // '' | 'ja' (bara flockar) | 'nej' (fåglar som inte är flock)
+  position: '',     // fågelns läge: '' eller nyckel i BIRD_POSITIONS
+  habitat: '',      // biotop: '' eller nyckel i HABITATS
   sort: 'date-desc',
 };
 let filter = loadFilter();
@@ -1096,6 +1198,10 @@ function matchesFilter(r) {
     if (filter.light && c.light !== filter.light) return false;
     if (filter.wx.length && (!c.wx || !filter.wx.every((t) => c.wx.tagSet.has(t)))) return false;
   }
+  if (filter.flock === 'ja' && !r.is_flock) return false;
+  if (filter.flock === 'nej' && (r.is_flock || kindOf(r.species) !== 'fagel')) return false;
+  if (filter.position && r.bird_position !== filter.position) return false;
+  if (filter.habitat && r.habitat !== filter.habitat) return false;
   const a = filter.animal;
   if (a?.type === 'kind' && kindOf(r.species) !== a.value) return false;
   if (a?.type === 'group' && groupOf(r.species) !== a.value) return false;
@@ -1177,6 +1283,11 @@ function renderFilterBar(shown) {
   for (const t of filter.wx) {
     if (WEATHER.TAGS[t]) chips.push([`wx:${t}`, `${WEATHER.TAGS[t].icon} ${WEATHER.TAGS[t].label}`]);
   }
+  if (FLOCK_OPTIONS[filter.flock]) chips.push(['flock', FLOCK_OPTIONS[filter.flock]]);
+  const pos = window.BIRD_POSITIONS[filter.position];
+  if (pos) chips.push(['position', `${pos.icon} ${pos.label}`]);
+  const hab = window.HABITATS[filter.habitat];
+  if (hab) chips.push(['habitat', `${hab.icon} ${hab.label}`]);
 
   $('filter-chips').innerHTML = chips.map(([key, label, isHtml]) => `
     <button type="button" class="chip" data-clear="${key}" aria-label="Ta bort filtret">
@@ -1200,6 +1311,9 @@ $('filter-chips').addEventListener('click', (e) => {
   if (chip.dataset.clear === 'date') setFilter({ quick: '', from: '', to: '' });
   if (chip.dataset.clear === 'tod') setFilter({ tod: '' });
   if (chip.dataset.clear === 'light') setFilter({ light: '' });
+  if (chip.dataset.clear === 'flock') setFilter({ flock: '' });
+  if (chip.dataset.clear === 'position') setFilter({ position: '' });
+  if (chip.dataset.clear === 'habitat') setFilter({ habitat: '' });
   if (chip.dataset.clear.startsWith('wx:')) setFilter({ wx: filter.wx.filter((t) => `wx:${t}` !== chip.dataset.clear) });
 });
 
@@ -1216,6 +1330,9 @@ function syncFilterForm() {
   document.querySelectorAll('#filter-tod [data-tod]').forEach((b) => b.classList.toggle('selected', b.dataset.tod === filter.tod));
   document.querySelectorAll('#filter-light [data-light]').forEach((b) => b.classList.toggle('selected', b.dataset.light === filter.light));
   document.querySelectorAll('#filter-wx [data-wx]').forEach((b) => b.classList.toggle('selected', filter.wx.includes(b.dataset.wx)));
+  document.querySelectorAll('#filter-flock [data-flock]').forEach((b) => b.classList.toggle('selected', b.dataset.flock === filter.flock));
+  document.querySelectorAll('#filter-position [data-position]').forEach((b) => b.classList.toggle('selected', b.dataset.position === filter.position));
+  document.querySelectorAll('#filter-habitat [data-habitat]').forEach((b) => b.classList.toggle('selected', b.dataset.habitat === filter.habitat));
   document.querySelectorAll('#filter-quick [data-quick]').forEach((b) => {
     b.classList.toggle('selected', b.dataset.quick === filter.quick && (filter.quick || (!filter.from && !filter.to)));
   });
@@ -1269,6 +1386,20 @@ $('filter-light').innerHTML = '<button type="button" data-light="">Alla</button>
   Object.entries(WEATHER.LIGHT).map(([k, t]) => `<button type="button" data-light="${k}">${t.icon} ${t.label}</button>`).join('');
 $('filter-wx').innerHTML = Object.entries(WEATHER.TAGS)
   .map(([k, t]) => `<button type="button" data-wx="${k}">${t.icon} ${t.label}</button>`).join('');
+// Knappar för flock, fågelns läge och biotop
+const FLOCK_OPTIONS = { ja: '🐦🐦🐦 Bara flockar', nej: '🐦 Fåglar utan flock' };
+$('filter-flock').innerHTML = '<button type="button" data-flock="">Alla</button>' +
+  Object.entries(FLOCK_OPTIONS).map(([k, label]) => `<button type="button" data-flock="${k}">${label}</button>`).join('');
+$('filter-position').innerHTML = '<button type="button" data-position="">Alla</button>' +
+  Object.entries(window.BIRD_POSITIONS).map(([k, t]) => `<button type="button" data-position="${k}">${t.icon} ${t.label}</button>`).join('');
+$('filter-habitat').innerHTML = '<button type="button" data-habitat="">Alla</button>' +
+  Object.entries(window.HABITATS).map(([k, t]) => `<button type="button" data-habitat="${k}">${t.icon} ${t.label}</button>`).join('');
+for (const key of ['flock', 'position', 'habitat']) {
+  $(`filter-${key}`).addEventListener('click', (e) => {
+    const b = e.target.closest(`[data-${key}]`);
+    if (b) setFilter({ [key]: b.dataset[key] });
+  });
+}
 $('filter-tod').addEventListener('click', (e) => {
   const b = e.target.closest('[data-tod]');
   if (b) setFilter({ tod: b.dataset.tod });
@@ -1418,8 +1549,9 @@ function renderList(list) {
     return `
       <li class="report-card ${own ? 'own' : ''}" style="border-left-color:${colorFor(r.user_id)}">
         ${typeBadge(r)}
-        <h3><span class="card-icon" style="background:${colorFor(r.user_id)}">${iconFor(r.species)}</span>
-            ${escapeHtml(r.species)} (${r.animal_count} st)</h3>
+        <h3><span class="card-icon${r.is_flock ? ' pin-flock' : ''}" style="background:${colorFor(r.user_id)};--c:${colorFor(r.user_id)}">${iconFor(r.species)}</span>
+            ${escapeHtml(r.species)} (${countText(r)})</h3>
+        ${fieldsLine(r, 'p')}
         <p>🕒 ${formatDateTime(r.observed_at)}</p>
         <p>${weatherLine(r)}</p>
         <p>👤 ${escapeHtml(nameFor(r.user_id, r.reporter_email))}${own ? ' (du)' : ''}</p>
@@ -1564,6 +1696,18 @@ const swedishParts = (d) => {
 };
 const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
 
+// Antal djur per rapport, i grupper
+const COUNT_BANDS = [
+  { label: '1', max: 1 }, { label: '2–5', max: 5 }, { label: '6–20', max: 20 },
+  { label: '21–50', max: 50 }, { label: 'Över 50', max: Infinity },
+];
+const FLOCK_UNKNOWN_BAND = 'Flock, okänt antal';
+COUNT_BANDS.push({ label: FLOCK_UNKNOWN_BAND, max: NaN });
+function countBand(r) {
+  if (r.animal_count == null) return r.is_flock ? FLOCK_UNKNOWN_BAND : null;
+  return COUNT_BANDS.find((b) => r.animal_count <= b.max)?.label ?? null;
+}
+
 const STAT_DIMS = {
   species:   { label: 'Art', icon: '🐾', top: 12, key: (r) => r.species, name: (k) => `${iconFor(k)} ${k}`,
     filter: (k) => ({ animal: { type: 'species', value: k, label: k, icon: iconFor(k) } }) },
@@ -1596,10 +1740,19 @@ const STAT_DIMS = {
     name: (k) => RISK.ZONES[k]?.label ?? k },
   level:     { label: 'Risknivå (från början)', icon: '🚦', key: (r) => assessReport(r).baseLevel.key, order: RISK.LEVELS.map((l) => l.key),
     name: (k) => RISK.LEVELS.find((l) => l.key === k)?.label ?? k },
+  habitat:   { label: 'Biotop', icon: '🌾', key: (r) => r.habitat, order: Object.keys(window.HABITATS), missing: 'Inte angiven',
+    name: (k) => `${window.HABITATS[k].icon} ${window.HABITATS[k].label}`, filter: (k) => ({ habitat: k }) },
+  position:  { label: 'Fågelns läge', icon: '☁️', onlyIf: (r) => kindOf(r.species) === 'fagel', key: (r) => r.bird_position,
+    order: Object.keys(window.BIRD_POSITIONS), missing: 'Inte angivet',
+    name: (k) => `${window.BIRD_POSITIONS[k].icon} ${window.BIRD_POSITIONS[k].label}`, filter: (k) => ({ position: k }) },
+  flock:     { label: 'Flock eller inte (fåglar)', icon: '🐦', onlyIf: (r) => kindOf(r.species) === 'fagel',
+    key: (r) => (r.is_flock ? 'ja' : 'nej'), order: ['ja', 'nej'],
+    name: (k) => ({ ja: '🐦🐦🐦 Flock', nej: '🐦 Inte flock' })[k], filter: (k) => ({ flock: k }) },
+  count:     { label: 'Antal djur per rapport', icon: '🔢', key: countBand, order: COUNT_BANDS.map((b) => b.label), name: (k) => k },
   reporter:  { label: 'Rapportör', icon: '👤', top: 12, key: (r) => r.user_id, name: (k) => nameFor(k), filter: (k) => ({ reporter: k }) },
 };
 // Korten som visas (i den här ordningen)
-const STAT_CARDS = ['species', 'kind', 'tod', 'light', 'condition', 'wxtag', 'temp', 'wind', 'hour', 'weekday', 'month', 'type', 'zone', 'level', 'group', 'reporter'];
+const STAT_CARDS = ['species', 'kind', 'habitat', 'position', 'flock', 'count', 'tod', 'light', 'condition', 'wxtag', 'temp', 'wind', 'hour', 'weekday', 'month', 'type', 'zone', 'level', 'group', 'reporter'];
 
 const STATS_KEY = 'viltrapport-stats';
 let statsPrefs = (() => {
@@ -1613,10 +1766,13 @@ function saveStatsPrefs(changes) {
 const weightOf = (r) => (statsPrefs.metric === 'animals' ? (Number(r.animal_count) || 1) : 1);
 const keysOf = (dim, r) => {
   const d = STAT_DIMS[dim];
+  if (d.onlyIf && !d.onlyIf(r)) return [];   // räknas inte alls (t.ex. däggdjur i "Fågelns läge")
   const k = d.keys ? d.keys(r) : [d.key(r)];
   return k == null || k[0] == null ? [MISSING] : k;
 };
-const dimName = (dim, k) => (k === MISSING ? (['condition', 'wxtag', 'temp', 'wind'].includes(dim) ? 'Väder saknas' : 'Okänt') : STAT_DIMS[dim].name(k));
+const dimName = (dim, k) => (k === MISSING
+  ? (STAT_DIMS[dim].missing ?? (['condition', 'wxtag', 'temp', 'wind'].includes(dim) ? 'Väder saknas' : 'Okänt'))
+  : STAT_DIMS[dim].name(k));
 
 // Räknar per nyckel. Ger [[nyckel, värde], …] sorterat.
 function tally(dim, list) {
@@ -1754,7 +1910,7 @@ function assessReport(r) {
     species: r.species,
     groupKey: groupOf(r.species),
     kind: kindOf(r.species),
-    count: r.animal_count,
+    count: riskCount(r),
     lat: r.lat,
     lng: r.lng,
     zones: riskZones,
@@ -1812,7 +1968,7 @@ function renderRisk(list) {
         ? '<div class="risk-score resolved">⏳<small>Inaktuell</small></div>'
         : `<div class="risk-score ${done ? 'resolved' : ''}" style="--level:${a.level.color}">${a.score}<small>${a.level.label}</small></div>`}
       <div class="risk-card-body">
-        <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${r.animal_count} st) ${typeBadge(r)}</h3>
+        <h3>${iconFor(r.species)} ${escapeHtml(r.species)} (${countText(r)}) ${typeBadge(r)}</h3>
         <p>📍 ${escapeHtml(a.zone.name)}</p>
         <p>🕒 ${formatDateTime(r.observed_at)} · ${escapeHtml(nameFor(r.user_id, r.reporter_email))}</p>
         ${done ? `<p>✅ ${RISK.ACTIONS[done.action].label}</p>` : ''}
@@ -1886,10 +2042,10 @@ function renderRiskSheet() {
 
     <h4 class="risk-section">Så räknades poängen</h4>
     <table class="risk-table">
-      <tr><td>Djur: ${iconFor(r.species)} ${escapeHtml(r.species)} (${kindText})</td><td>${a.severity} / 10</td></tr>
+      <tr><td>Djur: ${iconFor(r.species)} ${escapeHtml(r.species)} (${kindText})${fieldsText(r) ? `<br><small>${escapeHtml(fieldsText(r))}</small>` : ''}</td><td>${a.severity} / 10</td></tr>
       <tr><td>Läge: ${escapeHtml(a.zone.name)}<br><small>${RISK.ZONES[a.zone.zone].label}${
         otherZones.length ? ` · även: ${escapeHtml(otherZones.join(', '))}` : ''}</small></td><td>× ${a.zoneFactor}</td></tr>
-      <tr><td>Antal: ${r.animal_count} st</td><td>× ${a.flock}</td></tr>
+      <tr><td>Antal: ${countText(r)}${r.is_flock && !r.animal_count ? `<br><small>flock utan antal räknas som ${RISK.FLOCK_UNKNOWN_COUNT}</small>` : ''}</td><td>× ${a.flock}</td></tr>
       <tr ${a.raisedByType || a.stepsDown ? '' : 'class="total"'}><td>${a.severity} × 10 × ${a.zoneFactor} × ${a.flock} = ${Math.round(raw)}${raw > 100 ? ' (max 100)' : ''}</td><td>${a.calculated}</td></tr>
       ${a.raisedByType ? `<tr ${a.stepsDown ? '' : 'class="total"'}><td>${REPORT_TYPES[typeOf(r)].label} är alltid minst ${RISK.levelFor(a.minScore).label} (${a.minScore})</td><td>${a.baseScore}</td></tr>` : ''}
       ${a.stepsDown ? `<tr class="total"><td>Ålder ${ageText(a.ageHours)}: sänkt ${a.stepsDown} ${a.stepsDown === 1 ? 'nivå' : 'nivåer'}
@@ -2020,7 +2176,8 @@ function renderRiskConfigForm(c) {
     steps.map((f, i) => `
     <div class="cfg-row"><span class="cfg-label">Steg ${i + 1}</span>
       ${n(`data-flock-min="${i}"`, f.min, 1, 2, 100000)}
-      ${n(`data-flock-factor="${i}"`, f.factor, 0.1, 0.1, 10)}</div>`).join('');
+      ${n(`data-flock-factor="${i}"`, f.factor, 0.1, 0.1, 10)}</div>`).join('') +
+    `<div class="cfg-row"><span class="cfg-label">Fågelflock utan antal räknas som (djur)</span>${n('data-flock-unknown', c.FLOCK_UNKNOWN_COUNT, 1, 2, 100000)}</div>`;
 
   const levels = c.LEVELS.map((l) => `
     <div class="cfg-row cfg-level">
@@ -2092,6 +2249,7 @@ function collectRiskConfig() {
 
   body.querySelectorAll('[data-min-type]').forEach((el) => { cfg.MIN_SCORE_BY_TYPE[el.dataset.minType] = Number(el.value); });
   cfg.DECAY_HOURS = Number(val('[data-decay]'));
+  cfg.FLOCK_UNKNOWN_COUNT = Number(val('[data-flock-unknown]'));
   body.querySelectorAll('[data-dist]').forEach((el) => { cfg[el.dataset.dist] = Number(el.value); });
 
   for (const [k, v] of Object.entries(cfg)) {
@@ -2232,7 +2390,10 @@ async function exportExcel(onlyFiltered) {
       'Djurslag': r.species,
       'Djurgrupp': group ? group.label : 'Annat',
       'Fågel/däggdjur': kindText[kindOf(r.species)] ?? '',
-      'Antal': r.animal_count,
+      'Antal': r.animal_count ?? '',
+      'Flock': r.is_flock ? 'Ja' : kindOf(r.species) === 'fagel' ? 'Nej' : '',
+      'Fågelns läge': window.BIRD_POSITIONS[r.bird_position]?.label ?? '',
+      'Biotop': window.HABITATS[r.habitat]?.label ?? '',
       'Rapportör': nameFor(r.user_id, r.reporter_email),
       'Rapportörens e-post': r.reporter_email,
       'Kommentar': r.comment ?? '',
@@ -2322,6 +2483,7 @@ async function exportExcel(onlyFiltered) {
     ...c.FLOCK.map((f) => ({ 'Inställning': `Flock från ${f.min} djur`, 'Värde': f.factor })),
     ...c.LEVELS.map((l) => ({ 'Inställning': `Nivå ${l.label} från`, 'Värde': l.min, 'Åtgärd': l.action })),
     ...Object.entries(c.MIN_SCORE_BY_TYPE).map(([k, v]) => ({ 'Inställning': `Lägsta poäng: ${REPORT_TYPES[k]?.label ?? k}`, 'Värde': v })),
+    { 'Inställning': 'Flock utan antal räknas som (djur)', 'Värde': c.FLOCK_UNKNOWN_COUNT },
     { 'Inställning': 'Nedtrappning (timmar per nivå)', 'Värde': c.DECAY_HOURS },
     { 'Inställning': 'In-/utflygning (m)', 'Värde': c.APPROACH_LENGTH },
     { 'Inställning': 'Banområde halv bredd (m)', 'Värde': c.RUNWAY_HALF_WIDTH },
@@ -2552,7 +2714,12 @@ function openSheet(report = null) {
   editingId = report?.id ?? null;
   setReportType(report ? typeOf(report) : 'observation');
   $('species').value = report?.species ?? '';
-  $('animal-count').value = report?.animal_count ?? 1;
+  $('is-flock').checked = Boolean(report?.is_flock);
+  $('animal-count').value = report ? (report.animal_count ?? '') : 1;
+  selectedPosition = report?.bird_position ?? '';
+  selectedHabitat = report?.habitat ?? '';
+  renderChoiceChips();
+  $('quick-picks-wrap').open = false;
   $('observed-at').value = toLocalInput(report?.observed_at ?? new Date());
   $('comment').value = report?.comment ?? '';
   $('form-message').textContent = '';
@@ -2588,6 +2755,8 @@ document.querySelectorAll('[data-step]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const input = $('animal-count');
     const value = (parseInt(input.value, 10) || 0) + Number(btn.dataset.step);
+    // Flock: − från 1 tömmer fältet (= okänt antal)
+    if (value < 1 && $('is-flock').checked && !$('flock-wrap').hidden) { input.value = ''; return; }
     input.value = Math.min(10000, Math.max(1, value));
   });
 });
@@ -2614,11 +2783,24 @@ $('report-form').addEventListener('submit', async (e) => {
     return;
   }
 
+  const bird = formIsBird();
+  const flock = bird && $('is-flock').checked;
+  const countRaw = $('animal-count').value.trim();
+  const count = countRaw === '' ? null : parseInt(countRaw, 10);
+  if (count === null ? !flock : !(count >= 1 && count <= 10000)) {
+    message.textContent = flock ? 'Antalet måste vara 1–10 000, eller tomt.' : 'Fyll i antal (1–10 000).';
+    $('animal-count').focus();
+    return;
+  }
+
   const position = draftMarker.getLatLng();
   const payload = {
     report_type: selectedType,
     species: speciesName,
-    animal_count: parseInt($('animal-count').value, 10),
+    animal_count: count,
+    is_flock: flock,
+    bird_position: bird ? selectedPosition || null : null,
+    habitat: selectedHabitat || null,
     observed_at: new Date($('observed-at').value).toISOString(),
     comment: $('comment').value.trim() || null,
     lat: position.lat,

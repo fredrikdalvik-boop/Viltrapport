@@ -7,7 +7,10 @@ sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
 1. Logga in med e-post och lösenord.
 2. **Karta:** tryck där du såg djuret. Välj typ (**Observation**, **Olycka** eller **Birdstrike**),
    fyll i formuläret och tryck på **Spara**. Olyckor och birdstrikes visas som varningstrianglar.
-   - Varje nål har rapportörens färg och en ikon för djurslaget.
+   - Osäker på arten? Tryck på **Osäker på arten? Välj en grupp** (t.ex. Kråkfågel, Rovfågel, Hjortdjur).
+   - Fåglar: kryssa i **Flock** om du inte vet antalet, och välj om fågeln är i luften, på marken osv.
+   - **Biotop:** välj miljön (vatten, våtmark, kort/långt gräs, sly, skog …).
+   - Varje nål har rapportörens färg och en ikon för djurslaget. En flock visas som en hög med tre nålar.
    - Välj din egen färg under ⚙️ (uppe till höger).
    - Knappen uppe till höger byter mellan karta och satellitbild.
 3. **Filter** (🔍 uppe, både på kartan och i listan):
@@ -15,6 +18,7 @@ sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
    - **Rapportör:** alla, bara mina eller en viss person.
    - **Datum:** Idag, 7 dagar, 30 dagar eller egna datum.
    - **Tid på dygnet, ljus och väder:** t.ex. "Morgon" + "Har regnat".
+   - **Flock, fågelns läge och biotop.**
    - Filtren går att kombinera. Tryck ✕ på en etikett för att ta bort ett filter. Appen kommer ihåg filtret.
 4. Dina egna rapporter kan du **redigera** eller **ta bort**.
 5. **⚠️ Risk:** varje rapport får en riskpoäng 0–100 (Låg/Medel/Hög/Kritisk) utifrån djurets storlek,

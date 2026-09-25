@@ -38,6 +38,26 @@ alter table public.reports drop constraint if exists reports_weather_check;
 alter table public.reports add constraint reports_weather_check
   check (weather is null or (jsonb_typeof(weather) = 'object' and octet_length(weather::text) < 20000));
 
+-- Fågelflock: kan sparas utan antal (antal blir då tomt)
+alter table public.reports add column if not exists is_flock boolean not null default false;
+alter table public.reports alter column animal_count drop not null;
+alter table public.reports drop constraint if exists reports_count_or_flock_check;
+alter table public.reports add constraint reports_count_or_flock_check
+  check (animal_count is not null or is_flock);
+
+-- Var fågeln är: i luften, på marken, sitter eller på vattnet (bara fåglar, valfritt)
+alter table public.reports add column if not exists bird_position text;
+alter table public.reports drop constraint if exists reports_bird_position_check;
+alter table public.reports add constraint reports_bird_position_check
+  check (bird_position is null or bird_position in ('luft', 'mark', 'sitter', 'vatten'));
+
+-- Biotop: miljön där djuret är (valfritt). Samma nycklar som HABITATS i species.js.
+alter table public.reports add column if not exists habitat text;
+alter table public.reports drop constraint if exists reports_habitat_check;
+alter table public.reports add constraint reports_habitat_check
+  check (habitat is null or habitat in ('vatten', 'vatmark', 'kort_gras', 'langt_gras', 'aker',
+                                        'sly', 'skog', 'hardgjort', 'bebyggelse'));
+
 -- Profiler: en rad per användare (färg, medlem, admin)
 create table if not exists public.profiles (
   user_id    uuid primary key default auth.uid()

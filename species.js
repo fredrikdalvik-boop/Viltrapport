@@ -38,7 +38,9 @@ window.SPECIES_GROUPS = {
   uggla:      { kind: 'fagel', label: 'Ugglor',                               icon: '🦉' },
   krakfagel:  { kind: 'fagel', label: 'Kråkfåglar',                           icon: '🐦‍⬛', fallback: '🐦' },
   honsfagel:  { kind: 'fagel', label: 'Hönsfåglar (fasan, orre, tjäder …)',   icon: '🐓' },
-  mellanfagel:{ kind: 'fagel', label: 'Duvor, vadare och hackspettar',        icon: '🐦' },
+  duva:       { kind: 'fagel', label: 'Duvor',                                icon: '🐦' },
+  vadare:     { kind: 'fagel', label: 'Vadare (vipa, spov, snäppor …)',      icon: '🪶', fallback: '🐦' },
+  mellanfagel:{ kind: 'fagel', label: 'Hackspettar, gök m.fl.',               icon: '🐦' },
   smafagel:   { kind: 'fagel', label: 'Småfåglar',                            icon: '🐤' },
   fagel:      { kind: 'fagel', label: 'Övrig fågel',                          icon: '🐦' },
 
@@ -105,6 +107,9 @@ window.SPECIES = [
   ['Hund', 'hund'],
   ['Katt', 'katt'],
   ['Okänt däggdjur', 'daggdjur'],
+  ['Hjortdjur (okänd art)', 'hjort'],
+  ['Mårddjur (okänd art)', 'mard'],
+  ['Hare/kanin (okänd art)', 'hare'],
 
   // ---------- Gäss och svanar ----------
   ['Kanadagås', 'gas'],
@@ -228,35 +233,35 @@ window.SPECIES = [
   ['Fjällripa', 'honsfagel'],
 
   // ---------- Duvor, vadare, hackspettar m.fl. ----------
-  ['Ringduva', 'mellanfagel'],
-  ['Stadsduva', 'mellanfagel'],
-  ['Skogsduva', 'mellanfagel'],
-  ['Turkduva', 'mellanfagel'],
-  ['Turturduva', 'mellanfagel'],
-  ['Tofsvipa', 'mellanfagel'],
-  ['Storspov', 'mellanfagel'],
-  ['Småspov', 'mellanfagel'],
-  ['Ljungpipare', 'mellanfagel'],
-  ['Större strandpipare', 'mellanfagel'],
-  ['Mindre strandpipare', 'mellanfagel'],
-  ['Fjällpipare', 'mellanfagel'],
-  ['Kustpipare', 'mellanfagel'],
-  ['Strandskata', 'mellanfagel'],
-  ['Enkelbeckasin', 'mellanfagel'],
-  ['Dubbelbeckasin', 'mellanfagel'],
-  ['Dvärgbeckasin', 'mellanfagel'],
-  ['Morkulla', 'mellanfagel'],
-  ['Rödbena', 'mellanfagel'],
-  ['Gluttsnäppa', 'mellanfagel'],
-  ['Skogssnäppa', 'mellanfagel'],
-  ['Grönbena', 'mellanfagel'],
-  ['Drillsnäppa', 'mellanfagel'],
-  ['Brushane', 'mellanfagel'],
-  ['Kärrsnäppa', 'mellanfagel'],
-  ['Kustsnäppa', 'mellanfagel'],
-  ['Myrspov', 'mellanfagel'],
-  ['Rödspov', 'mellanfagel'],
-  ['Vadare (okänd art)', 'mellanfagel'],
+  ['Ringduva', 'duva'],
+  ['Stadsduva', 'duva'],
+  ['Skogsduva', 'duva'],
+  ['Turkduva', 'duva'],
+  ['Turturduva', 'duva'],
+  ['Tofsvipa', 'vadare'],
+  ['Storspov', 'vadare'],
+  ['Småspov', 'vadare'],
+  ['Ljungpipare', 'vadare'],
+  ['Större strandpipare', 'vadare'],
+  ['Mindre strandpipare', 'vadare'],
+  ['Fjällpipare', 'vadare'],
+  ['Kustpipare', 'vadare'],
+  ['Strandskata', 'vadare'],
+  ['Enkelbeckasin', 'vadare'],
+  ['Dubbelbeckasin', 'vadare'],
+  ['Dvärgbeckasin', 'vadare'],
+  ['Morkulla', 'vadare'],
+  ['Rödbena', 'vadare'],
+  ['Gluttsnäppa', 'vadare'],
+  ['Skogssnäppa', 'vadare'],
+  ['Grönbena', 'vadare'],
+  ['Drillsnäppa', 'vadare'],
+  ['Brushane', 'vadare'],
+  ['Kärrsnäppa', 'vadare'],
+  ['Kustsnäppa', 'vadare'],
+  ['Myrspov', 'vadare'],
+  ['Rödspov', 'vadare'],
+  ['Vadare (okänd art)', 'vadare'],
   ['Större hackspett', 'mellanfagel'],
   ['Mindre hackspett', 'mellanfagel'],
   ['Gröngöling', 'mellanfagel'],
@@ -356,5 +361,42 @@ window.SPECIES = [
 
   // ---------- Övrigt ----------
   ['Okänd fågel', 'fagel'],
+  ['Kråkfågel (okänd art)', 'krakfagel'],
+  ['Duva (okänd art)', 'duva'],
+  ['Hönsfågel (okänd art)', 'honsfagel'],
+  ['Svan (okänd art)', 'svan'],
+  ['Stor fågel (okänd art)', 'storfagel'],
+  ['Hackspett (okänd art)', 'mellanfagel'],
   ['Fågelflock (okänd art)', 'fagel'],
 ];
+
+// ---------- Snabbval: när man inte ser exakt vilken art det är ----------
+// Visas som knappar under Djurslag i formuläret. Namnen måste finnas i SPECIES ovan.
+window.QUICK_PICKS = [
+  'Okänd fågel', 'Småfågel (okänd art)', 'Kråkfågel (okänd art)', 'Mås/trut (okänd art)',
+  'Rovfågel (okänd art)', 'Gås (okänd art)', 'And (okänd art)', 'Vadare (okänd art)', 'Duva (okänd art)',
+  'Okänt däggdjur', 'Hjortdjur (okänd art)', 'Mårddjur (okänd art)', 'Hare/kanin (okänd art)',
+];
+
+// ---------- Var fågeln är (bara fåglar) ----------
+// Nycklarna måste stämma med kontrollen i supabase.sql (reports.bird_position).
+window.BIRD_POSITIONS = {
+  luft:   { label: 'I luften',                 icon: '☁️' },
+  mark:   { label: 'På marken',                icon: '🌱' },
+  sitter: { label: 'Sitter (träd, stolpe, tak)', icon: '🌳' },
+  vatten: { label: 'På vattnet',               icon: '〰️' },
+};
+
+// ---------- Biotop: miljön där djuret är (alla djur) ----------
+// Nycklarna måste stämma med kontrollen i supabase.sql (reports.habitat).
+window.HABITATS = {
+  vatten:     { label: 'Vatten',                         icon: '🌊' },
+  vatmark:    { label: 'Våtmark / dike',                 icon: '💧' },
+  kort_gras:  { label: 'Kort gräs',                      icon: '🟩' },
+  langt_gras: { label: 'Långt gräs',                     icon: '🌾' },
+  aker:       { label: 'Åker',                           icon: '🚜' },
+  sly:        { label: 'Sly / buskar',                   icon: '🌿' },
+  skog:       { label: 'Skog',                           icon: '🌲' },
+  hardgjort:  { label: 'Hårdgjort (bana, väg, platta)',  icon: '🛣️' },
+  bebyggelse: { label: 'Byggnader / tak',                icon: '🏢' },
+};

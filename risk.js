@@ -9,7 +9,7 @@ window.RISK = {
   // Standard per djurgrupp (se species.js). Minsta fågel = 1, älg = 10.
   GROUP_SEVERITY: {
     // Fåglar
-    smafagel: 1, mellanfagel: 3, krakfagel: 3, fagel: 3, vitfagel: 5, and: 5,
+    smafagel: 1, mellanfagel: 3, duva: 3, vadare: 3, krakfagel: 3, fagel: 3, vitfagel: 5, and: 5,
     honsfagel: 5, uggla: 5, rovfagel: 6, gas: 7, storfagel: 8, svan: 9,
     // Däggdjur
     smadjur: 1, fladdermus: 1, igelkott: 2, ekorre: 2, katt: 3, hare: 4, mard: 4,
@@ -53,6 +53,8 @@ window.RISK = {
     { min: 2,  factor: 1.3 },
     { min: 1,  factor: 1.0 },
   ],
+  // Fågelflock där man inte angett antal räknas som så här många djur
+  FLOCK_UNKNOWN_COUNT: 10,
 
   // ---------- Lägsta poäng per rapporttyp ----------
   // En birdstrike har redan hänt och är alltid minst Hög risk (45 = gränsen för Hög).
@@ -106,7 +108,7 @@ window.RISK = {
   // Standardvärdena ovan sparas här. Ändringar från databasen (tabellen risk_config)
   // läggs ovanpå med R.applyConfig(). Tom config = standard.
   R.CONFIG_KEYS = [
-    'GROUP_SEVERITY', 'SPECIES_SEVERITY', 'ZONES', 'FLOCK', 'MIN_SCORE_BY_TYPE', 'DECAY_HOURS', 'LEVELS',
+    'GROUP_SEVERITY', 'SPECIES_SEVERITY', 'ZONES', 'FLOCK', 'FLOCK_UNKNOWN_COUNT', 'MIN_SCORE_BY_TYPE', 'DECAY_HOURS', 'LEVELS',
     'RUNWAY_HALF_WIDTH', 'RUNWAY_END_EXTRA', 'APPROACH_LENGTH', 'APPROACH_SPREAD', 'TAXIWAY_HALF_WIDTH', 'NEAR_FENCE',
   ];
   const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -161,6 +163,7 @@ window.RISK = {
     const limits = {
       RUNWAY_HALF_WIDTH: [10, 1000], RUNWAY_END_EXTRA: [0, 1000], APPROACH_LENGTH: [0, 20000],
       APPROACH_SPREAD: [0, 1], TAXIWAY_HALF_WIDTH: [5, 500], NEAR_FENCE: [0, 5000],
+      FLOCK_UNKNOWN_COUNT: [2, 100000],
     };
     for (const [k, [min, max]] of Object.entries(limits)) {
       if (k in cfg) d[k] = num(cfg[k], min, max, d[k]);

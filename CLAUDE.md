@@ -31,17 +31,19 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `config.js` | Supabase-URL, publishable-nyckel, kartans centrum och zoom |
 | `risk.js` | `window.RISK`: alla riskinställningar (allvarlighet per grupp/art, zonfaktorer, flock, nivåer, åtgärder, zontyper) + geometri och `RISK.assess()` |
 | `weather.js` | `window.WEATHER`: väder från Open-Meteo, gränser för vädermarkörer (`LIMITS`, `TAGS`), ljus (solhöjd), tid på dygnet, `fetchFor()`, `analyze()` |
-| `species.js` | `SPECIES_GROUPS` (grupp → etikett + emoji-ikon, ev. `fallback`) och `SPECIES` (`[namn, grupp]`, ca 300 arter) |
+| `species.js` | `SPECIES_GROUPS` (grupp → etikett + emoji-ikon, ev. `fallback`), `SPECIES` (`[namn, grupp]`, ca 300 arter), `QUICK_PICKS` (snabbval "okänd art"), `BIRD_POSITIONS`, `HABITATS` |
 | `icons/hero-scene.svg` | Startsidans illustration från Claude Design (viewBox 480×440, `xMidYMax slice`). Används som den är. Himlens gradient ligger på `.hero` i CSS |
 | `sw.js` | Service worker. Egna filer: network-first. CDN: cache-first. Supabase och kartbilder cachas inte |
 | `manifest.json`, `icons/` | PWA-installation |
 | `supabase.sql` | Tabell, trigger och RLS-policies. Klistras in i Supabase SQL Editor |
 
 ## Databas (`public.reports`)
-`id, user_id, reporter_email, report_type, species, animal_count, observed_at, comment, lat, lng, weather, created_at, updated_at`
+`id, user_id, reporter_email, report_type, species, animal_count, is_flock, bird_position, habitat, observed_at, comment, lat, lng, weather, created_at, updated_at`
 - `report_type`: `observation` (standard), `olycka` (fordon) eller `birdstrike` (flygplan). Check-constraint i SQL.
 - Trigger `reports_set_owner` sätter `user_id` och `reporter_email` från den
   inloggades JWT vid insert och låser dem vid update. Appen skickar dem aldrig.
+- `is_flock` (fåglar): flock. Då får `animal_count` vara tomt (check: antal eller flock). `bird_position`: luft/mark/sitter/vatten (bara fåglar).
+  `habitat`: biotop (nycklar i `HABITATS`). Nycklarna finns också i check-constraints i `supabase.sql` – ändra båda.
 - `weather` (jsonb) = väder för timmen och 4 h före. Fylls vid sparande, eller i efterhand via `set_report_weather()` (bara om tom). Ändrat väder ändrar inte `updated_at`.
 - RLS är på. Medlemmar (`is_member()`): select alla, insert egna. Update/delete: ägaren eller admin (`is_admin()`). `anon`: ingen åtkomst.
 
@@ -80,12 +82,17 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Emoji som äldre telefoner saknar (🫎, 🪿, 🐦‍⬛) kontrolleras med canvas och byts mot `fallback`.
 - Skriver man en okänd art visas "Ny art!" med val av grupp. Arten sparas i `custom_species`.
 - Varje grupp i `SPECIES_GROUPS` har `kind`: `daggdjur`, `fagel` eller `annat`.
+- Obestämda arter (t.ex. "Kråkfågel (okänd art)") finns i `SPECIES`. `QUICK_PICKS` visas som knappar under "Osäker på arten?" i formuläret.
+- Flock ritas som en hög med tre nålar (`.pin-flock`, box-shadow med färgen `--c`). `pinHtml(r)` bygger nålen.
+- Formuläret: flock och "Var är fågeln?" visas bara för fåglar (`formIsBird()`/`updateBirdFields()`). Biotop för alla. Tryck igen för att avmarkera.
+- Texter: `countText(r)` ("3 st", "flock", "flock, ca 40"), `fieldsText(r)` (läge + biotop).
 
 ## Riskanalys
 - Poäng 0–100 = allvarlighet (1–10, `GROUP_SEVERITY`/`SPECIES_SEVERITY`) × 10 × lägesfaktor × flockfaktor, max 100.
   Nivåer: Låg <20, Medel 20–44, Hög 45–69, Kritisk ≥70 (`RISK.LEVELS`, med rekommenderad åtgärd).
 - Nedtrappning: risken sjunker en nivå per `RISK.DECAY_HOURS` (24 h) räknat från `observed_at`. Poängen kapas till nya nivåns tak.
   Efter Låg blir den `expired` ("Inaktuell") och räknas inte i aktiva/sammanfattning. Hanterade (åtgärd) räknas som hanterade oavsett ålder.
+- Flock utan antal räknas som `RISK.FLOCK_UNKNOWN_COUNT` (10) djur (`riskCount(r)`). Kan ändras i riskinställningarna.
 - `RISK.MIN_SCORE_BY_TYPE`: lägsta poäng per rapporttyp. Birdstrike = alltid minst 45 (Hög). Riskrapporten visar när poängen höjts av typen.
 - Läge (`RISK.ZONES`, olika för fågel/däggdjur): runway 1.0/1.0, taxiway 0.85/0.95, approach 0.9/0.2, airside 0.6/0.9, near 0.3/0.25, outside 0.1/0.05. Högsta zonen gäller.
 - Zoner i tabellen `risk_zones (name, zone_type, points jsonb)`, ritas av admin i appen (`startDraw()`, ritpanelen `#draw-panel`):
@@ -129,6 +136,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Aktiva filter visas som etiketter (`.chip`) med ✕.
 - Väderfilter: `tod` (tid på dygnet), `light` (natt/gryning/dag/skymning), `wx` (lista med vädermarkörer, alla måste stämma).
   Knapparna (`.chipset`) byggs från `WEATHER.TIME_OF_DAY/LIGHT/TAGS`. Rapporter utan väder faller bort när `wx` är valt.
+- `flock` (''/'ja'/'nej'), `position` (fågelns läge), `habitat` (biotop).
 
 ## Väder, ljus och tid på dygnet
 - `weather.js`: Open-Meteo (gratis, ingen nyckel). Forecast-API för rapporter < 80 dagar, annars archive-API (saknar sikt).
@@ -141,7 +149,8 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 
 ## Statistik
 - Fliken "📊 Statistik" (`#stats-view`), följer filtret. `renderStats()`: nyckeltal, "insikter", stapelkort, jämförtabell (`renderCompare`, värmekarta).
-- Grupperingar i `STAT_DIMS` (art, djurtyp, grupp, tid på dygnet, ljus, timme, väder, vädermarkörer, temperatur, vind, veckodag, månad, typ, zon, risknivå, rapportör).
+- Grupperingar i `STAT_DIMS` (art, djurtyp, grupp, biotop, fågelns läge, flock, antal per rapport, tid på dygnet, ljus, timme, väder, vädermarkörer, temperatur, vind, veckodag, månad, typ, zon, risknivå, rapportör).
+  `onlyIf(r)` = räkna bara vissa rapporter (t.ex. bara fåglar), `missing` = text när värdet saknas.
   Ordningen på korten i `STAT_CARDS`. Klick på en stapel sätter motsvarande filter. Val sparas i `localStorage` (`viltrapport-stats`).
 - **Stående önskemål från användaren:** när vi bygger nya funktioner, lägg också till nya bra filter och grupperingar
   i statistiken (`STAT_DIMS`/`STAT_CARDS`, och vid behov i filtret). Föreslå dem gärna.
