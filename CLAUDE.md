@@ -185,7 +185,13 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - GPS: `watchPosition` (hög noggrannhet), sämre än ±100 m markerar inget. Rutor som nuddar radien (25/50/100/200 m, sparas per person i `localStorage`) blir gröna.
   Samma person i samma ruta sparas högst en gång per 2 h. Skärmen hålls tänd (Wake Lock). Fungerar bara med appen öppen.
 - Kö: nya besök läggs i `patrol.queue` (sparas i `localStorage`, `viltrapport-patrol-queue`) och skickas i omgångar (`flushPatrolQueue`), även efter nätavbrott.
-- Manuellt: "✋ Markera själv" – klick på ronderingskartan markerar rutan (`patrolMapClick()`). Tryck igen på egen nyss markerad ruta = ångra.
+- Manuellt: "✋ Markera rutor" – zoomar in till minst 16 och klick på ronderingskartan markerar rutan (`patrolMapClick()`, blinkar till med `flashCell()`).
+  Tryck igen på egen nyss markerad ruta = ångra.
+- Ny observation under ronderingen: "➕ Ny observation" (`patrol.reporting`) → tryck på kartan → `startPatrolReport()` visar nålen `patrol.draft` på
+  ronderingskartan och öppnar vanliga formuläret (samma position läggs i `draftMarker` på vanliga kartan). `removeDraftMarker()` tar bort båda.
+- Observationer på ronderingskartan: "Dölj/Visa" (`#patrol-obs`, `setPatrolObs()`, `layerPrefs.patrolObs`). Lagret `patrolObsLayer` fylls av
+  `renderMarkers()` → `fillMarkers(layer, list)` och följer filtret. Filterknapp/filterrad syns i fliken bara när observationerna visas (`updatePatrolFilterUI()`).
+- Hopfälld panel: status, GPS, Markera rutor och Ny observation syns (bara "Till mig" och resten döljs).
 - Statistik: kortet `#stats-patrol` (andel grönt/orange/rött, rutor per person och GPS/manuellt, 30 dagar). Excel: fliken "Rondering".
 - `fetchAll()` i app.js hämtar sida för sida (Supabase ger max 1000 rader per anrop) – används för rapporter och rondering.
 

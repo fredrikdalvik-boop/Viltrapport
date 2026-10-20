@@ -1246,6 +1246,7 @@ function removeDraftMarker() {
     draftMarker.remove();
     draftMarker = null;
   }
+  removePatrolDraft();
 }
 
 // Flera arter på samma plats: nålarna läggs i en ring runt punkten så att alla syns
@@ -1259,8 +1260,15 @@ function spreadAnchor(r) {
 }
 
 function renderMarkers(list) {
-  if (!markerLayer) return;
-  markerLayer.clearLayers();
+  fillMarkers(markerLayer, list);
+  // Ronderingskartan visar observationerna bara om man valt det (följer filtret)
+  if (patrolObsLayer) fillMarkers(patrolObsLayer, layerPrefs.patrolObs ? list : []);
+}
+
+// Ritar rapporterna som nålar i ett kartlager
+function fillMarkers(layer, list) {
+  if (!layer) return;
+  layer.clearLayers();
 
   for (const r of list) {
     const type = REPORT_TYPES[typeOf(r)];
@@ -1300,7 +1308,7 @@ function renderMarkers(list) {
     marker.on('mouseout', lower);
     marker.on('popupopen', () => { raise(); marker.getElement()?.classList.add('marker-active'); });
     marker.on('popupclose', () => { marker.getElement()?.classList.remove('marker-active'); lower(); });
-    markerLayer.addLayer(marker);
+    layer.addLayer(marker);
   }
 }
 
@@ -3022,8 +3030,7 @@ function switchTab(viewId) {
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === viewId));
   if (viewId === 'stats-view') render();
   // Filtret gäller rapporter – det behövs inte i ronderingen
-  document.querySelector('.filter-bar').hidden = viewId === 'patrol-view';
-  $('filter-open').hidden = viewId === 'patrol-view';
+  updatePatrolFilterUI(viewId);
   onPatrolTab(viewId === 'patrol-view');
   if (viewId === 'map-view') {
     map?.invalidateSize();

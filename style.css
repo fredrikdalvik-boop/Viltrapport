@@ -1285,7 +1285,7 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
 }
 .patrol-bar.collapsed .patrol-collapse { transform: rotate(180deg); }
 .patrol-bar.collapsed > :not(.patrol-head):not(.patrol-buttons) { display: none; }
-.patrol-bar.collapsed .patrol-buttons > :not(#patrol-gps) { display: none; }
+.patrol-bar.collapsed #patrol-center { display: none; }
 .patrol-bar.collapsed .patrol-status { font-size: 12.5px; font-weight: 600; }
 .patrol-bar.collapsed .patrol-buttons .btn { min-height: 42px; }
 
@@ -1326,3 +1326,9 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
 }
 /* Ingen filterrad alls när inget filter är valt */
 .filter-bar.empty { display: none; }
+
+/* Rondering: ny observation och observationer på kartan */
+#patrol-report.selected { background: var(--orange); color: var(--white); }
+.patrol-obs-row { display: flex; flex-direction: column; gap: 4px; }
+.patrol-obs-row .chipset { flex-wrap: nowrap; }
+.patrol-obs-row .chipset button { flex: 1; min-height: 34px; padding: 0 6px; }

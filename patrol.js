@@ -31,11 +31,14 @@ let patrolLayer = null;       // rutnätet på den vanliga kartan
 let patrolMap = null;         // ronderingsflikens karta
 let patrolMapLayer = null;    // rutnätet på ronderingsflikens karta
 let patrolBorderLine = null;  // yttergränsen ritad på ronderingskartan
+let patrolObsLayer = null;    // observationerna på ronderingskartan (fylls av renderMarkers i app.js)
 
 const patrol = {
   open: false,       // visas ronderingsfliken?
   gps: false,        // är GPS-ronderingen igång?
   manual: false,     // trycker man på rutor själv?
+  reporting: false,  // väntar på ett tryck för en ny observation?
+  draft: null,       // nålen för den nya observationen på ronderingskartan
   watchId: null,
   wakeLock: null,
   pos: null,         // senaste position { lat, lng, accuracy }
@@ -432,10 +435,20 @@ window.addEventListener('online', () => flushPatrolQueue());
 
 // ---------- Markera rutor själv ----------
 
-// Tryck på ronderingskartan. Markerar bara när "✋ Markera själv" är på.
+// Tryck på ronderingskartan: ny observation, markera ruta – eller ett tips om inget läge är valt
 function patrolMapClick(latlng) {
+  // Formuläret är öppet: trycket flyttar nålen (som på vanliga kartan)
+  if (patrol.draft && !$('sheet').hidden) {
+    patrol.draft.setLatLng(latlng);
+    placeDraftMarker(latlng);
+    return true;
+  }
+  if (patrol.reporting) {
+    startPatrolReport(latlng);
+    return true;
+  }
   if (!patrol.manual) {
-    showToast('Tryck på ✋ Markera själv först för att markera rutor');
+    showToast('Välj ✋ Markera rutor eller ➕ Ny observation först');
     return false;
   }
   const [i, j] = cellAt(latlng.lat, latlng.lng);
@@ -450,12 +463,64 @@ function patrolMapClick(latlng) {
     return true;
   }
   if (markCell(i, j, 'manual')) {
+    flashCell(i, j);
     redrawPatrol();
     renderPatrolBar();
   } else {
     showToast('Du har redan ronderat rutan de senaste 2 timmarna');
   }
   return true;
+}
+
+// Kort markering runt rutan man tryckte på, så att man ser att det tog
+function flashCell(i, j) {
+  if (!patrolMap) return;
+  const box = L.rectangle(cellBounds(i, j), { color: '#fff', weight: 4, fillColor: '#2e7d32', fillOpacity: 0.55, interactive: false }).addTo(patrolMap);
+  setTimeout(() => box.remove(), 900);
+}
+
+// ---------- Ny observation under ronderingen ----------
+// Formuläret är detsamma som på vanliga kartan. Nålen visas på ronderingskartan
+// och samma position används för rapporten (draftMarker på vanliga kartan).
+
+function startPatrolReport(latlng) {
+  patrol.reporting = false;
+  removePatrolDraft();
+  patrol.draft = L.marker(latlng, { draggable: true, autoPan: true }).addTo(patrolMap);
+  patrol.draft.on('dragend', () => placeDraftMarker(patrol.draft.getLatLng()));
+  placeDraftMarker(latlng);
+  openSheet();
+  renderPatrolBar();
+  // Flytta kartan så att nålen syns ovanför formuläret
+  setTimeout(() => {
+    const sheet = $('sheet').offsetHeight || 0;
+    patrolMap.panInside(latlng, { paddingTopLeft: [30, 30], paddingBottomRight: [IS_MOBILE ? 30 : $('patrol-bar').offsetWidth + 40, (IS_MOBILE ? sheet : 0) + 40] });
+  }, 60);
+}
+
+function removePatrolDraft() {
+  patrol.draft?.remove();
+  patrol.draft = null;
+}
+
+// ---------- Observationer på ronderingskartan ----------
+
+function setPatrolObs(on) {
+  saveLayerPrefs({ patrolObs: on });
+  if (patrolMap && patrolObsLayer) {
+    if (on && !patrolMap.hasLayer(patrolObsLayer)) patrolObsLayer.addTo(patrolMap);
+    if (!on) patrolObsLayer.remove();
+  }
+  updatePatrolFilterUI();
+  render();
+  renderPatrolBar();
+}
+
+// Filterknappen och filterraden behövs i ronderingen bara när observationerna visas där
+function updatePatrolFilterUI(viewId = patrol.open ? 'patrol-view' : null) {
+  const hide = viewId === 'patrol-view' && !layerPrefs.patrolObs;
+  document.querySelector('.filter-bar').hidden = hide;
+  $('filter-open').hidden = hide;
 }
 
 async function undoManualCell(key) {
@@ -514,9 +579,12 @@ function initPatrolMap() {
   L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true, position: 'topleft' }).addTo(patrolMap);
   patrolMap.attributionControl.setPosition('bottomleft');
   patrolMap.on('baselayerchange', (e) => saveLayerPrefs({ patrolBase: e.name }));
-  patrolMapLayer = createPatrolLayer(patrolMap, 0.42).addTo(patrolMap);
+  patrolMapLayer = createPatrolLayer(patrolMap, 0.5).addTo(patrolMap);
+  patrolObsLayer = L.layerGroup();
+  if (layerPrefs.patrolObs) patrolObsLayer.addTo(patrolMap);
   drawPatrolBorder();
   patrolMap.on('click', (e) => patrolMapClick(e.latlng));
+  render();   // fyller observationerna
 }
 
 // Anropas från switchTab()
@@ -534,6 +602,7 @@ function onPatrolTab(visible) {
 function stopPatrol() {
   if (patrol.gps) stopPatrolGps();
   patrol.manual = false;
+  patrol.reporting = false;
 }
 
 // Rutnätet på den vanliga kartan: knappen "🚶 Rutnät" (och lagerknappen)
@@ -563,16 +632,21 @@ function renderPatrolBar() {
   $('patrol-gps').classList.toggle('btn-primary', !patrol.gps);
   $('patrol-gps').classList.toggle('btn-secondary', patrol.gps);
   $('patrol-manual').classList.toggle('selected', patrol.manual);
-  $('patrol-manual').textContent = patrol.manual ? '✋ Klar' : '✋ Markera själv';
+  $('patrol-manual').textContent = patrol.manual ? '✋ Klar' : '✋ Markera rutor';
+  $('patrol-report').classList.toggle('selected', patrol.reporting);
+  $('patrol-report').textContent = patrol.reporting ? '✕ Avbryt' : '➕ Ny observation';
+  $('patrol-obs').innerHTML = [['', 'Dölj'], ['1', 'Visa']].map(([v, label]) =>
+    `<button type="button" data-obs="${v}" class="${Boolean(v) === Boolean(layerPrefs.patrolObs) ? 'selected' : ''}">${label}</button>`).join('');
   patrolMap?.getContainer().classList.toggle('patrol-manual', patrol.manual);
   $('patrol-center').hidden = !patrol.pos;
 
   let status;
-  if (patrol.gps && !patrol.pos) status = '📡 Söker GPS …';
+  if (patrol.reporting) status = '➕ Tryck på kartan där djuret är';
+  else if (patrol.gps && !patrol.pos) status = '📡 Söker GPS …';
   else if (patrol.gps && patrol.pos.accuracy > PATROL.MAX_ACCURACY) status = `📡 Dålig GPS (±${Math.round(patrol.pos.accuracy)} m) – inga rutor markeras`;
   else if (patrol.gps) status = `🟢 Rondering pågår · GPS ±${Math.round(patrol.pos.accuracy)} m · ${patrol.sessionCells} nya rutor`;
-  else if (patrol.manual) status = `✋ Tryck på rutor du ser. Tryck igen för att ångra. ${patrol.sessionCells} nya rutor`;
-  else status = '🚶 Rondering – välj GPS eller markera själv';
+  else if (patrol.manual) status = `✋ Tryck på rutorna du ser (igen = ångra) · ${patrol.sessionCells} nya`;
+  else status = '🚶 Rondering';
   $('patrol-status').textContent = status;
   const queued = patrol.queue.length;
   $('patrol-queue').hidden = !queued || (navigator.onLine && !patrol.flushFailed);
@@ -623,8 +697,22 @@ function initPatrolUI() {
   $('patrol-gps').addEventListener('click', () => (patrol.gps ? stopPatrolGps() : startPatrolGps()));
   $('patrol-manual').addEventListener('click', () => {
     patrol.manual = !patrol.manual;
-    if (patrol.manual) patrol.sessionCells = patrol.gps ? patrol.sessionCells : 0;
+    patrol.reporting = false;
+    if (patrol.manual) {
+      if (!patrol.gps) patrol.sessionCells = 0;
+      // Zooma in så att rutorna är stora nog att trycka på
+      if (patrolMap && patrolMap.getZoom() < 16) patrolMap.setZoom(16);
+    }
     renderPatrolBar();
+  });
+  $('patrol-report').addEventListener('click', () => {
+    patrol.reporting = !patrol.reporting;
+    patrol.manual = false;
+    renderPatrolBar();
+  });
+  $('patrol-obs').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-obs]');
+    if (b) setPatrolObs(Boolean(b.dataset.obs));
   });
   $('patrol-center').addEventListener('click', () => {
     if (!patrol.pos || !patrolMap) return;
