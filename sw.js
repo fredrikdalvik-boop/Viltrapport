@@ -1,6 +1,6 @@
 // Service worker – gör att appen kan installeras och startar snabbare.
 // Öka versionsnumret vid varje ändring (samma nummer som ?v= i index.html).
-const CACHE = 'viltrapport-v19';
+const CACHE = 'viltrapport-v20';
 
 const APP_FILES = [
   './',
@@ -11,6 +11,7 @@ const APP_FILES = [
   './species.js',
   './risk.js',
   './weather.js',
+  './patrol.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

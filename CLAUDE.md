@@ -31,6 +31,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `config.js` | Supabase-URL, publishable-nyckel, kartans centrum och zoom |
 | `risk.js` | `window.RISK`: alla riskinställningar (allvarlighet per grupp/art, zonfaktorer, flock, nivåer, åtgärder, zontyper) + geometri och `RISK.assess()` |
 | `weather.js` | `window.WEATHER`: väder från Open-Meteo, gränser för vädermarkörer (`LIMITS`, `TAGS`), ljus (solhöjd), tid på dygnet, `fetchFor()`, `analyze()` |
+| `patrol.js` | Rondering: rutnät, färger, GPS (`watchPosition`), manuell markering, kö för offline, panelen `#patrol-bar`. Laddas före app.js och använder app.js globala variabler när den körs |
 | `species.js` | `SPECIES_GROUPS` (grupp → etikett + emoji-ikon, ev. `fallback`), `SPECIES` (`[namn, grupp]`, ca 300 arter), `QUICK_PICKS` (snabbval "okänd art"), `BIRD_POSITIONS`, `HABITATS` |
 | `icons/hero-scene.svg` | Startsidans illustration från Claude Design (viewBox 480×440, `xMidYMax slice`). Används som den är. Himlens gradient ligger på `.hero` i CSS |
 | `sw.js` | Service worker. Egna filer: network-first. CDN: cache-first. Supabase och kartbilder cachas inte |
@@ -158,6 +159,21 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   Ordningen på korten i `STAT_CARDS`. Klick på en stapel sätter motsvarande filter. Val sparas i `localStorage` (`viltrapport-stats`).
 - **Stående önskemål från användaren:** när vi bygger nya funktioner, lägg också till nya bra filter och grupperingar
   i statistiken (`STAT_DIMS`/`STAT_CARDS`, och vid behov i filtret). Föreslå dem gärna.
+
+## Rondering (`patrol.js`)
+- Kartan delas i rutor (standard 100 × 100 m, admin väljer 50–500 m) inom GPX-filens yttergräns (`setPatrolBorder()` från `loadAreas()`;
+  utan gräns ±4 km kring mitten). Rutorna räknas i meter från `CONFIG.MAP_CENTER` (`cellAt`, `cellBounds`, nyckel `"i:j"`).
+- Ritas av ett eget canvaslager (`L.GridLayer`, pane `patrolPane` z 350, opacity 0.38, från zoom 11). Lager "🚶 Rondering" i lagerknappen (`layerPrefs.patrol`).
+- Färg efter senaste besök: grön i `greenDays` dagar (1–30, standard 7), sedan gradvis orange under lika lång tid, röd efter 2 × greenDays eller aldrig (`patrolColor`).
+- Tabell `patrol_visits (id, user_id, lat, lng, method gps|manual, visited_at)`: bara rutans mittpunkt sparas, inte GPS-spåret.
+  Trigger `patrol_visits_stamp` sätter `user_id = auth.uid()` och begränsar tiden (max 30 dagar bakåt, aldrig framtid). Medlemmar läser/skapar, egna eller admin tar bort.
+  `patrol_config (id = 1, config {grid, greenDays})`: medlemmar läser, admin uppdaterar. Appen hämtar besök 62 dagar bakåt (`PATROL.LOAD_DAYS`).
+- GPS: `watchPosition` (hög noggrannhet), sämre än ±100 m markerar inget. Rutor som nuddar radien (25/50/100/200 m, sparas per person i `localStorage`) blir gröna.
+  Samma person i samma ruta sparas högst en gång per 2 h. Skärmen hålls tänd (Wake Lock). Fungerar bara med appen öppen.
+- Kö: nya besök läggs i `patrol.queue` (sparas i `localStorage`, `viltrapport-patrol-queue`) och skickas i omgångar (`flushPatrolQueue`), även efter nätavbrott.
+- Manuellt: "✋ Markera själv" – kartklick markerar rutan (`patrolMapClick()` anropas först i kartans klick). Tryck igen på egen nyss markerad ruta = ångra.
+- Statistik: kortet `#stats-patrol` (andel grönt/orange/rött, rutor per person och GPS/manuellt, 30 dagar). Excel: fliken "Rondering".
+- `fetchAll()` i app.js hämtar sida för sida (Supabase ger max 1000 rader per anrop) – används för rapporter och rondering.
 
 ## Planerade funktioner (pausade)
 ### Egna områden med etikett + import från Excel (önskemål från Charlie, pausad 2026-10)

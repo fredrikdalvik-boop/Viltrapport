@@ -1131,3 +1131,62 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
 .extra-species .new-species { margin-top: 0; }
 .extra-bird { display: flex; flex-direction: column; gap: 8px; }
 .add-species { margin-top: 12px; }
+
+/* ===== Rondering ===== */
+.patrol-open {
+  position: absolute;
+  left: 10px;
+  bottom: 30px;
+  z-index: 800;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 2px solid var(--green);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--green-ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px var(--shadow);
+  cursor: pointer;
+}
+.patrol-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
+  max-height: 60%;
+  overflow-y: auto;
+  padding: 8px 16px 10px;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 16px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.patrol-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.patrol-x { border: none; background: none; color: var(--text); font-size: 22px; padding: 4px 8px; cursor: pointer; }
+.patrol-status { margin: 0; font-weight: 600; }
+.patrol-bar .message, .patrol-bar .hint { margin: 0; }
+.patrol-buttons { display: flex; gap: 8px; }
+.patrol-buttons #patrol-gps, .patrol-buttons #patrol-manual { flex: 1; padding: 0 8px; }
+#patrol-manual.selected { background: #1565c0; border-color: #1565c0; color: #fff; }
+.patrol-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.patrol-label { font-size: 14px; color: var(--muted); font-weight: 600; }
+.patrol-coverage { display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px; }
+.patrol-coverage .pc { min-width: 0; }
+.pc-green { background: hsl(130, 65%, 38%); }
+.pc-orange { background: hsl(30, 85%, 48%); }
+.pc-red { background: hsl(4, 80%, 48%); }
+.patrol-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.patrol-legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; opacity: 0.8; }
+.patrol-settings summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--green-ink); padding: 2px 0; }
+.patrol-settings[open] { display: flex; flex-direction: column; gap: 6px; }
+.patrol-settings label { margin-top: 6px; }
+.patrol-privacy { font-size: 12.5px; }
+.patrol-manual .leaflet-container, .leaflet-container.patrol-manual { cursor: cell; }
+#stats-patrol { margin-top: 12px; }
+.patrol-kpis { grid-template-columns: repeat(3, 1fr); }

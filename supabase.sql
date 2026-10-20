@@ -503,3 +503,84 @@ revoke execute on function public.set_report_weather(bigint, jsonb) from public,
 grant execute on function public.set_report_weather(bigint, jsonb) to authenticated;
 grant execute on function public.is_member() to authenticated;
 grant execute on function public.is_admin() to authenticated;
+
+
+-- =============================================================
+-- 7. RONDERING
+-- =============================================================
+-- Rutor som ronderats. Vi sparar bara rutans mittpunkt, vem och när – inte hela GPS-spåret.
+
+create table if not exists public.patrol_visits (
+  id         bigint generated always as identity primary key,
+  user_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  lat        double precision not null check (lat between -90 and 90),
+  lng        double precision not null check (lng between -180 and 180),
+  method     text not null default 'gps' check (method in ('gps', 'manual')),
+  visited_at timestamptz not null default now()
+);
+create index if not exists patrol_visits_visited_at_idx on public.patrol_visits (visited_at desc);
+
+-- Ronderingsinställningar (rutstorlek, hur länge en ruta är grön). En rad, id = 1.
+create table if not exists public.patrol_config (
+  id         integer primary key default 1 check (id = 1),
+  config     jsonb not null default '{}'::jsonb check (jsonb_typeof(config) = 'object'),
+  updated_by uuid references auth.users (id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+insert into public.patrol_config (id) values (1) on conflict (id) do nothing;
+
+-- Vem som ronderat sätts alltid till den inloggade. Tiden får vara högst 30 dagar
+-- gammal (rutor som sparats i telefonen utan nät) och aldrig i framtiden.
+create or replace function public.patrol_visits_stamp()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.user_id := auth.uid();
+  new.visited_at := least(greatest(coalesce(new.visited_at, now()), now() - interval '30 days'), now());
+  return new;
+end;
+$$;
+drop trigger if exists patrol_visits_stamp on public.patrol_visits;
+create trigger patrol_visits_stamp
+  before insert on public.patrol_visits
+  for each row execute function public.patrol_visits_stamp();
+
+drop trigger if exists patrol_config_stamp on public.patrol_config;
+create trigger patrol_config_stamp
+  before update on public.patrol_config
+  for each row execute function public.risk_config_stamp();
+
+alter table public.patrol_visits enable row level security;
+alter table public.patrol_config enable row level security;
+
+drop policy if exists "Medlemmar ser rondering" on public.patrol_visits;
+create policy "Medlemmar ser rondering"
+  on public.patrol_visits for select to authenticated
+  using ((select public.is_member()));
+
+drop policy if exists "Medlemmar ronderar" on public.patrol_visits;
+create policy "Medlemmar ronderar"
+  on public.patrol_visits for insert to authenticated
+  with check ((select public.is_member()) and user_id = (select auth.uid()));
+
+drop policy if exists "Egna eller admin tar bort rondering" on public.patrol_visits;
+create policy "Egna eller admin tar bort rondering"
+  on public.patrol_visits for delete to authenticated
+  using (user_id = (select auth.uid()) or (select public.is_admin()));
+
+drop policy if exists "Medlemmar läser ronderingsinställningar" on public.patrol_config;
+create policy "Medlemmar läser ronderingsinställningar"
+  on public.patrol_config for select to authenticated
+  using ((select public.is_member()));
+
+drop policy if exists "Admin ändrar ronderingsinställningar" on public.patrol_config;
+create policy "Admin ändrar ronderingsinställningar"
+  on public.patrol_config for update to authenticated
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
+
+revoke all on public.patrol_visits, public.patrol_config from anon;
+revoke all on public.patrol_visits, public.patrol_config from authenticated;
+grant select, delete on public.patrol_visits to authenticated;
+grant insert (lat, lng, method, visited_at) on public.patrol_visits to authenticated;  -- vem sätts automatiskt
+grant select on public.patrol_config to authenticated;
+grant update (config) on public.patrol_config to authenticated;

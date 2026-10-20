@@ -27,11 +27,15 @@ sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
    och registrera åtgärd (t.ex. Skrämselskott). Risken ligger kvar tills en åtgärd registrerats.
 6. **Admin:** ritar banor, taxibanor och stängsel under ⚠️ Risk → **Rita ny zon**, och ändrar hur risken
    räknas under ⚠️ Risk → **Ändra riskinställningar** (standardvärdena finns i `risk.js`).
-7. **Väder:** varje rapport får automatiskt vädret för timmen och de 4 timmarna före (från Open-Meteo),
+7. **🚶 Rondering** (knappen nere till vänster på kartan): rutorna är röda tills någon ronderat dem.
+   - **▶ Starta GPS:** rutorna inom radien kring dig blir gröna medan du går eller kör. Håll appen öppen.
+   - **✋ Markera själv:** tryck på rutor du ser, t.ex. med kikare. Tryck igen för att ångra.
+   - En ruta är grön i 7 dagar, blir sedan orange och till sist röd. Admin ändrar tiden och rutstorleken under "Mer".
+8. **Väder:** varje rapport får automatiskt vädret för timmen och de 4 timmarna före (från Open-Meteo),
    samt om det var natt, gryning, dag eller skymning. Tryck på **📄 Detaljer** för att se allt.
-8. **📊 Statistik:** diagram över arter, tid på dygnet, väder med mera. Följer filtret.
+9. **📊 Statistik:** diagram över arter, tid på dygnet, väder med mera. Följer filtret.
    Tryck på en stapel för att filtrera på den. **Jämför** visar t.ex. art mot tid på dygnet.
-9. **Export:** ⚙️ → **Exportera till Excel** (allt eller det filtret visar).
+10. **Export:** ⚙️ → **Exportera till Excel** (allt eller det filtret visar).
 
 ## Installera på mobilen
 - **Android (Chrome):** meny ⋮ → *Lägg till på startskärmen* / *Installera app*.

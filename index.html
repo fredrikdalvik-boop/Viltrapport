@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=19">
+  <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
   <section id="auth-view" class="auth-view" hidden>
     <div class="auth-col">
       <div class="hero">
-        <img class="hero-img" src="icons/hero-scene.svg?v=19"
+        <img class="hero-img" src="icons/hero-scene.svg?v=20"
              alt="Två jägare med gevär på ryggen går med en labrador och en beagle i granskogen i solnedgången">
         <div class="hero-scrim"></div>
         <!-- Appens namn fylls i från CONFIG.APP_NAME i config.js -->
@@ -202,6 +202,38 @@
       <section id="map-view" class="view">
         <div id="map"></div>
         <div class="map-hint" id="map-hint">Tryck på kartan där du såg djuret</div>
+        <button type="button" id="patrol-open" class="patrol-open">🚶 Rondering</button>
+
+        <!-- Rondering: kompakt panel längst ner på kartan (resten under "Mer") -->
+        <div id="patrol-bar" class="patrol-bar" hidden>
+          <div class="patrol-head">
+            <p id="patrol-status" class="patrol-status" role="status"></p>
+            <button type="button" id="patrol-close" class="patrol-x" aria-label="Stäng ronderingen">✕</button>
+          </div>
+          <p id="patrol-warning" class="message" role="alert" hidden></p>
+          <p id="patrol-queue" class="hint" hidden></p>
+          <div class="patrol-buttons">
+            <button type="button" id="patrol-gps" class="btn btn-primary">▶ Starta GPS</button>
+            <button type="button" id="patrol-manual" class="btn btn-secondary">✋ Markera själv</button>
+            <button type="button" id="patrol-center" class="btn btn-secondary" aria-label="Centrera på mig" hidden>📍</button>
+          </div>
+          <div class="patrol-coverage" id="patrol-coverage" aria-hidden="true"></div>
+          <div class="patrol-legend" id="patrol-legend"></div>
+          <details class="patrol-settings">
+            <summary>Mer: radie och inställningar</summary>
+            <div class="patrol-row">
+              <span class="patrol-label">Radie kring dig</span>
+              <div class="chipset" id="patrol-radius"></div>
+            </div>
+            <label for="patrol-grid">Rutstorlek</label>
+            <select id="patrol-grid"></select>
+            <label for="patrol-days">Grön i (dagar, 1–30)</label>
+            <input id="patrol-days" type="number" inputmode="numeric" min="1" max="30">
+            <p class="hint">Efter det blir rutan gradvis orange under lika många dagar, sedan röd. <span id="patrol-cfg-hint"></span></p>
+            <button type="button" id="patrol-cfg-save" class="btn btn-primary btn-block">Spara inställningar</button>
+            <p class="hint patrol-privacy">🔒 Bara vilka rutor som ronderats, av vem och när sparas – inte ditt GPS-spår. Håll appen öppen och skärmen på under ronderingen.</p>
+          </details>
+        </div>
       </section>
 
       <!-- Lista -->
@@ -229,6 +261,7 @@
           <div id="compare-table" class="compare-wrap"></div>
         </div>
         <div id="stats-cards" class="stats-cards"></div>
+        <div id="stats-patrol" class="stat-card"></div>
         <p class="hint wx-credit">Väderdata: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0)</p>
       </section>
 
@@ -521,10 +554,11 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=19"></script>
-  <script src="species.js?v=19"></script>
-  <script src="risk.js?v=19"></script>
-  <script src="weather.js?v=19"></script>
-  <script src="app.js?v=19"></script>
+  <script src="config.js?v=20"></script>
+  <script src="species.js?v=20"></script>
+  <script src="risk.js?v=20"></script>
+  <script src="weather.js?v=20"></script>
+  <script src="patrol.js?v=20"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

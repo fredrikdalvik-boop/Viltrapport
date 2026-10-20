@@ -809,6 +809,7 @@ async function handleSession(session) {
   if (!currentUser) {
     reports = [];
     isAdmin = false;
+    if (patrol.open) closePatrol();
     // Byt inte bort t.ex. "Skapa konto" om man redan står där
     if ($('auth-view').hidden || ['code', 'password'].includes(currentPanel())) showView('login');
     return;
@@ -1036,6 +1037,14 @@ function initMap() {
   });
   drawRiskZones();
 
+  // Rondering: rutor som är röda tills de ronderats
+  createPatrolLayer();
+  if (layerPrefs.patrol !== false) patrolLayer.addTo(map);
+  layersControl.addOverlay(patrolLayer, '🚶 Rondering');
+  map.on('overlayadd overlayremove', (e) => {
+    if (e.layer === patrolLayer) saveLayerPrefs({ patrol: e.type === 'overlayadd' });
+  });
+
   markerLayer = L.layerGroup().addTo(map);
 
   // Tryck på kartan = placera (eller flytta) nålen
@@ -1045,6 +1054,8 @@ function initMap() {
       addDrawPoint(e.latlng);
       return;
     }
+    // Markerar man rutor i ronderingen blir trycket en ronderad ruta
+    if (patrolMapClick(e.latlng)) return;
     // Är filterpanelen öppen stänger första trycket bara den
     if (!$('filter-sheet').hidden) {
       closeFilter();
@@ -1123,6 +1134,8 @@ async function loadAreas(layersControl) {
         });
       }
       (groups[type] ?? groups.subarea).addLayer(shape);
+      // Yttergränsen bestämmer vilka rutor som ingår i ronderingen
+      if (type === 'border' && closed) setPatrolBorder(points);
     }
 
     const overlays = [
@@ -1271,14 +1284,30 @@ function popupHtml(r) {
 
 // ---------- Hämta rapporter ----------
 
+// Supabase ger högst 1000 rader per anrop – hämta sida för sida
+async function fetchAll(build, max = 20000) {
+  const page = 1000;
+  const rows = [];
+  for (let from = 0; from < max; from += page) {
+    const { data, error } = await build().range(from, from + page - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data ?? []));
+    if (!data || data.length < page) break;
+  }
+  return { data: rows, error: null };
+}
+
 async function loadReports() {
-  const [reportsResult, profilesResult, speciesResult, zonesResult, actionsResult, configResult] = await Promise.all([
-    db.from('reports').select('*').order('observed_at', { ascending: false }).limit(5000),
+  const [reportsResult, profilesResult, speciesResult, zonesResult, actionsResult, configResult, patrolResult, patrolCfgResult] = await Promise.all([
+    fetchAll(() => db.from('reports').select('*').order('observed_at', { ascending: false }).order('id')),
     db.from('profiles').select('user_id, color, email, full_name, is_admin, is_member'),
     db.from('custom_species').select('id, name, category').order('name'),
     db.from('risk_zones').select('id, name, zone_type, points').order('zone_type').order('name'),
     db.from('report_actions').select('id, report_id, action, comment, created_by, created_at').order('created_at'),
     db.from('risk_config').select('config, updated_by, updated_at').eq('id', 1).maybeSingle(),
+    fetchAll(() => db.from('patrol_visits').select('id, user_id, lat, lng, method, visited_at')
+      .gte('visited_at', patrolSince()).order('visited_at', { ascending: false }).order('id'), 50000),
+    db.from('patrol_config').select('config, updated_by, updated_at').eq('id', 1).maybeSingle(),
   ]);
 
   if (reportsResult.error) {
@@ -1304,6 +1333,11 @@ async function loadReports() {
     riskConfigMeta = configResult.data;
   }
   drawRiskZones();
+  // Rondering
+  if (patrolResult.error) console.warn('Rondering:', patrolResult.error.message);
+  if (patrolCfgResult.error) console.warn('Ronderingsinställningar:', patrolCfgResult.error.message);
+  setPatrolData(patrolResult.error ? null : patrolResult.data, patrolCfgResult.error ? null : patrolCfgResult.data);
+  flushPatrolQueue();
 
   reports = reportsResult.data;
   sightingMap = null;
@@ -2041,6 +2075,34 @@ function renderStats(list) {
   }).join('');
 
   renderCompare(list);
+  renderPatrolStats();
+}
+
+// Rondering i statistiken (följer inte filtret – det gäller rutor, inte rapporter)
+function renderPatrolStats() {
+  const c = patrolCoverage();
+  const pct = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
+  const st = patrolStats(30);
+  const bar = (label, v, maxV, total) => `
+    <div class="bar-row" title="${escapeHtml(`${label}: ${v} rutor`)}">
+      <span class="bar-label">${escapeHtml(label)}</span>
+      <span class="bar-track"><span class="bar-fill" style="width:${(v / Math.max(1, maxV)) * 100}%"></span></span>
+      <span class="bar-value">${v}<small>${total ? Math.round((v / total) * 100) : 0} %</small></span>
+    </div>`;
+  const total = st.recent.length;
+  const maxUser = Math.max(1, ...st.byUser.map(([, v]) => v));
+  const x = patrolCfg.greenDays;
+  $('stats-patrol').innerHTML = `
+    <h3>🚶 Rondering<small>följer inte filtret · rutor ${patrolCfg.grid} × ${patrolCfg.grid} m</small></h3>
+    <div class="stats-kpis patrol-kpis">
+      <div class="kpi"><strong style="color:${patrolColor(0)}">${pct(c.green)} %</strong><span>grönt (0–${x} d)</span></div>
+      <div class="kpi"><strong style="color:${patrolColor(x * 1.5)}">${pct(c.orange)} %</strong><span>orange</span></div>
+      <div class="kpi"><strong style="color:${PATROL_RED}">${pct(c.red)} %</strong><span>rött</span></div>
+    </div>
+    <h4 class="risk-section">Ronderade rutor per person, 30 dagar</h4>
+    ${st.byUser.map(([id, v]) => bar(nameFor(id), v, maxUser, total)).join('') || '<p class="hint">Ingen rondering de senaste 30 dagarna.</p>'}
+    ${total ? `<h4 class="risk-section">Hur rutorna ronderades</h4>
+      ${bar('📡 GPS', st.byMethod.gps, total, total)}${bar('✋ Manuellt', st.byMethod.manual, total, total)}` : ''}`;
 }
 
 // Jämförelsetabell: rader × kolumner, färgstyrka efter antal
@@ -2718,6 +2780,18 @@ async function exportExcel(onlyFiltered) {
   XLSX.utils.book_append_sheet(wb, makeSheet(speciesRows.length ? speciesRows : [{ 'Info': 'Inga rapporter' }], { 'Djurslag': 28 }), 'Per djurslag');
   XLSX.utils.book_append_sheet(wb, makeSheet(zoneRows.length ? zoneRows : [{ 'Info': 'Inga riskzoner ritade' }], { 'Namn': 24, 'Koordinater (lat, lng)': 80 }), 'Riskzoner');
   XLSX.utils.book_append_sheet(wb, makeSheet(settingsRows, { 'Inställning': 44, 'Åtgärd': 40 }), 'Riskinställningar');
+  // Rondering: varje ronderad ruta (rutans mittpunkt, vem och när)
+  const patrolRows = [...patrolVisits].sort((a, b) => new Date(b.visited_at) - new Date(a.visited_at)).map((v) => ({
+    'Tid': xlDate(v.visited_at),
+    'Person': nameFor(v.user_id),
+    'Sätt': v.method === 'manual' ? 'Manuellt' : 'GPS',
+    'Rutans mitt, lat': v.lat,
+    'Rutans mitt, lng': v.lng,
+    'Rutstorlek (m)': patrolCfg.grid,
+    'Karta': `https://www.google.com/maps?q=${v.lat},${v.lng}`,
+  }));
+  XLSX.utils.book_append_sheet(wb, makeSheet(patrolRows.length ? patrolRows : [{ 'Info': `Ingen rondering de senaste ${PATROL.LOAD_DAYS} dagarna` }],
+    { 'Tid': 17, 'Person': 24, 'Karta': 45 }), 'Rondering');
 
   const file = `viltrapport-${localDate(now)}${onlyFiltered ? '-urval' : ''}.xlsx`;
   XLSX.writeFile(wb, file, { compression: true });
@@ -2937,7 +3011,7 @@ function openSheet(report = null) {
 
 function closeSheet() {
   $('sheet').hidden = true;
-  $('map-hint').hidden = false;
+  $('map-hint').hidden = patrol.open;
   editingId = null;
   removeDraftMarker();
 }
@@ -3155,6 +3229,7 @@ function updateOnlineStatus() {
 window.addEventListener('online', () => { updateOnlineStatus(); if (currentUser) loadReports(); });
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
+initPatrolUI();
 
 // Hämta nya rapporter när man kommer tillbaka till appen
 document.addEventListener('visibilitychange', () => {
