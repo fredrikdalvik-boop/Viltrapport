@@ -1204,3 +1204,125 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
   margin: -1px; padding: 0; border: 0;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* =============================================================
+   Mobil först: så mycket karta som möjligt, knappar bara där de behövs
+   ============================================================= */
+
+/* Filterknappen ligger i toppen */
+.topbar .filter-btn {
+  min-height: 40px;
+  padding: 0 12px;
+  border: none;
+  background: rgba(255,255,255,0.12);
+  color: var(--white);
+}
+.topbar .filter-btn:hover { background: rgba(255,255,255,0.2); }
+.topbar .filter-btn.active { background: var(--green); color: var(--white); }
+
+/* Raden med aktiva filter: en rad som kan svepas i sidled */
+.filter-chips {
+  order: 0;
+  flex: 1 1 auto;
+  flex-basis: auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-bar { flex-wrap: nowrap; padding: 5px 12px; }
+
+/* Hjälptexten på kartan tonas bort efter en stund */
+.map-hint { transition: opacity .6s ease; }
+.map-hint.fade { opacity: 0; }
+
+/* Knappkolumn på kartan (Min plats, Rutnät) */
+.map-tools { display: flex; flex-direction: column; gap: 8px; }
+.map-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 20px;
+  box-shadow: 0 1px 6px var(--shadow);
+  cursor: pointer;
+}
+.map-tool.on { background: var(--green); color: var(--white); }
+.map-tool.busy { animation: tool-pulse 1s ease-in-out infinite; }
+@keyframes tool-pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .map-tool.busy { animation: none; opacity: 0.6; } }
+.tool-label { display: none; font-size: 15px; font-weight: 600; }
+
+/* Listkort: hela kortet öppnar detaljerna, knapparna är små ikoner */
+.report-card.tappable { cursor: pointer; }
+.report-card .card-actions { justify-content: flex-end; }
+.report-card .card-actions .btn-icon { flex: 0 0 auto; min-width: 48px; min-height: 44px; padding: 0 12px; font-size: 18px; }
+.btn-label { display: none; }
+
+/* Ronderingspanelen kan fällas ihop: då syns bara status och GPS-knappen */
+.patrol-head { align-items: flex-start; }
+.patrol-collapse {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -4px -4px 0 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.patrol-bar.collapsed .patrol-collapse { transform: rotate(180deg); }
+.patrol-bar.collapsed > :not(.patrol-head):not(.patrol-buttons) { display: none; }
+.patrol-bar.collapsed .patrol-buttons > :not(#patrol-gps) { display: none; }
+.patrol-bar.collapsed .patrol-status { font-size: 12.5px; font-weight: 600; }
+.patrol-bar.collapsed .patrol-buttons .btn { min-height: 42px; }
+
+/* Mobil: tätare topp och flikrad */
+@media (max-width: 799px) {
+  :root { --topbar-h: 48px; --tabbar-h: 54px; }
+  .topbar { gap: 8px; padding: 0 10px; }
+  .brand-logo { height: 36px; }
+  .brand-kicker { font-size: 10px; }
+  .brand-name { font-size: 16px; }
+  .topbar .filter-btn { width: 44px; padding: 0; justify-content: center; position: relative; }
+  .topbar .filter-btn .filter-label { display: none; }
+  .topbar .filter-btn .filter-badge { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; line-height: 20px; font-size: 12px; padding: 0 5px; }
+  .filter-bar.empty { display: none; }
+  .tab { font-size: 11.5px; }
+  .tab-icon { font-size: 19px; }
+  .map-hint { font-size: 14px; padding: 6px 12px; top: 10px; }
+  .leaflet-control-layers-toggle { width: 44px !important; height: 44px !important; background-size: 22px 22px; }
+  .leaflet-bottom.leaflet-right .leaflet-control { margin-right: 10px; margin-bottom: 8px; }
+  .leaflet-control-layers { border-radius: 50% !important; box-shadow: 0 1px 6px var(--shadow) !important; border: none !important; }
+  .leaflet-control-layers-expanded { border-radius: 12px !important; }
+  .leaflet-control-attribution { font-size: 10px; }
+}
+
+/* Dator: mer synligt – knappar med text */
+@media (min-width: 800px) {
+  .tool-label, .btn-label { display: inline; }
+  .map-tool { width: auto; padding: 0 16px; border-radius: 999px; font-size: 18px; }
+  .report-card .card-actions .btn-icon { font-size: 15px; gap: 6px; display: inline-flex; align-items: center; }
+  .patrol-bar { width: 220px; }
+  .filter-label { margin-left: 6px; }
+}
+/* Riskmärke och knappar på samma rad längst ner i kortet */
+.report-card .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.report-card .card-foot .card-actions { margin-top: 0; gap: 6px; margin-left: auto; }
+@media (max-width: 799px) {
+  .report-card .card-actions .btn-icon { min-width: 42px; min-height: 40px; padding: 0 8px; font-size: 17px; }
+}
+/* Ingen filterrad alls när inget filter är valt */
+.filter-bar.empty { display: none; }

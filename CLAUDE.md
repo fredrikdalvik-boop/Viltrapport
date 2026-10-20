@@ -56,6 +56,13 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - Val under ⚙️ (Auto/Ljust/Mörkt) sparas i `localStorage` (`viltrapport-theme`). Ett litet skript i `<head>` sätter `data-theme` innan sidan ritas.
 - Vanliga kartan (`className: 'tiles-streets'`) inverteras i mörkt tema; satellit lämnas orörd.
 - Toppen (`.topbar`, `--topbar-bg`) är mörk i båda temana: logga (`icons/logo.jpg`, höjd 42px) + `brand-kicker` (line1) + `brand-name` (`data-app-name="rest"` = line2+line3).
+- **Mobil först (≤ 799px):** så mycket karta som möjligt. Toppen 48px, flikraden 54px. Filterknappen (`#filter-open`) ligger i toppen (bara 🔍 + märke på mobil).
+  Filterraden (`.filter-bar`) syns bara när något filter är valt (klassen `empty`), som en rad som sveps i sidled.
+  Inga +/−-knappar på pekskärm (`IS_TOUCH`). Kartknappar i en kolumn nere till höger (`MapTools`): 📍 Min plats (`#locate-btn`, ruta med "Rapportera här"),
+  🚶 Rutnät (`#patrol-toggle`) och lagerknappen. Hjälptexten tonas bort efter 5 s eller när kartan flyttas (`showMapHint()`/`fadeMapHint()`, inte i ritläget).
+  Listkort: hela kortet öppnar detaljerna, knapparna är ikoner (`.btn-icon`, text i `.btn-label` visas bara på dator) på samma rad som riskmärket (`.card-foot`).
+  Ronderingspanelen kan fällas ihop (`#patrol-collapse`, sparas i `viltrapport-patrol-collapsed`): då syns bara status och GPS-knappen.
+- **Dator (≥ 800px):** knappar med text (`.tool-label`, `.btn-label`), +/− finns, kartknappar uppe till höger, ronderingspanelen 220px.
 - Paneler (`.sheet`): tät layout, rubriken (`h2`) och knappraden (`.sheet-buttons`) är `position: sticky` så att Avbryt/Spara alltid syns.
 
 ## Design (inloggning)

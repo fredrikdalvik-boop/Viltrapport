@@ -1009,7 +1009,8 @@ function initMap() {
     return;
   }
 
-  map = L.map('map').setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
+  // Mobil: inga +/−-knappar (man nyper för att zooma) och knapparna samlas nere till höger
+  map = L.map('map', { zoomControl: !IS_TOUCH }).setView(CONFIG.MAP_CENTER, CONFIG.MAP_ZOOM);
 
   const streets = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -1025,7 +1026,9 @@ function initMap() {
   // Kom ihåg karta/satellit till nästa gång
   (layerPrefs.base === 'Satellit' ? satellite : streets).addTo(map);
   map.on('baselayerchange', (e) => saveLayerPrefs({ base: e.name }));
-  const layersControl = L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true }).addTo(map);
+  new MapTools().addTo(map);
+  const layersControl = L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null,
+    { collapsed: true, position: IS_MOBILE ? 'bottomright' : 'topright' }).addTo(map);
   loadAreas(layersControl);
 
   // Riskzoner (banor, in-/utflygning, taxibanor, stängsel)
@@ -1063,7 +1066,71 @@ function initMap() {
     placeDraftMarker(e.latlng);
     if ($('sheet').hidden) openSheet();
   });
+
+  // Hjälptexten tonas bort när man börjar använda kartan
+  map.on('movestart', fadeMapHint);
+  showMapHint();
 }
+
+// ---------- Kartans knappar och hjälptext ----------
+
+const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches;
+const IS_MOBILE = window.matchMedia('(max-width: 799px)').matches;
+
+// Knappkolumn på kartan: Min plats och ronderingsrutor (knapparna finns i index.html)
+const MapTools = L.Control.extend({
+  options: { position: IS_MOBILE ? 'bottomright' : 'topright' },
+  onAdd() {
+    const box = L.DomUtil.create('div', 'map-tools');
+    box.append($('locate-btn'), $('patrol-toggle'));
+    L.DomEvent.disableClickPropagation(box);
+    return box;
+  },
+});
+
+let mapHintTimer = null;
+function showMapHint() {
+  const hint = $('map-hint');
+  hint.hidden = false;
+  hint.classList.remove('fade');
+  clearTimeout(mapHintTimer);
+  mapHintTimer = setTimeout(fadeMapHint, 5000);
+}
+function fadeMapHint() {
+  if (drawing) return;   // i ritläget ska instruktionen synas hela tiden
+  $('map-hint').classList.add('fade');
+}
+
+// Min plats: visa var man är och erbjud att rapportera där
+let locateMarker = null;
+$('locate-btn').addEventListener('click', () => {
+  if (!('geolocation' in navigator) || !map) {
+    showToast('Den här webbläsaren kan inte visa din plats');
+    return;
+  }
+  $('locate-btn').classList.add('busy');
+  navigator.geolocation.getCurrentPosition((p) => {
+    $('locate-btn').classList.remove('busy');
+    const latlng = [p.coords.latitude, p.coords.longitude];
+    locateMarker?.remove();
+    locateMarker = L.circleMarker(latlng, { radius: 8, color: '#fff', weight: 3, fillColor: '#1565c0', fillOpacity: 1 })
+      .addTo(map)
+      .bindPopup(`<div class="popup"><p>📍 Du är här (±${Math.round(p.coords.accuracy)} m)</p>
+        <div class="actions"><button class="btn btn-primary" data-report-here>Rapportera här</button></div></div>`)
+      .openPopup();
+    map.setView(latlng, Math.max(map.getZoom(), 16));
+  }, (err) => {
+    $('locate-btn').classList.remove('busy');
+    showToast(err.code === 1 ? 'Appen får inte använda platsen. Tillåt plats i telefonens inställningar.' : 'Hittar inte din plats just nu');
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-report-here]') || !locateMarker) return;
+  const latlng = locateMarker.getLatLng();
+  map.closePopup();
+  placeDraftMarker(latlng);
+  openSheet();
+});
 
 // ---------- Områden (GPX) ----------
 // Ritar tomtgränser och områden från en GPX-fil. WeHunt anger typen i <type>:
@@ -1271,12 +1338,12 @@ function popupHtml(r) {
       ${r.comment ? `<p>💬 ${escapeHtml(r.comment)}</p>` : ''}
       <p>${riskPill(r)}</p>
       <div class="actions">
-        <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">📄 Detaljer, väder & risk</button>
+        <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">📄 Detaljer, väder &amp; risk</button>
       </div>
       ${own ? `
         <div class="actions">
-          <button class="btn btn-secondary" data-action="edit" data-id="${r.id}">Redigera</button>
-          <button class="btn btn-danger" data-action="delete" data-id="${r.id}">Ta bort</button>
+          <button class="btn btn-secondary" data-action="edit" data-id="${r.id}">✏️ Redigera</button>
+          <button class="btn btn-danger" data-action="delete" data-id="${r.id}">🗑️ Ta bort</button>
         </div>` : ''}
     </div>`;
 }
@@ -1514,6 +1581,8 @@ function renderFilterBar(shown) {
     </button>`).join('');
 
   $('filter-count').hidden = chips.length === 0;
+  document.querySelector('.filter-bar').classList.toggle('empty', chips.length === 0);
+  $('filter-open').title = `Filter – visar ${shown} av ${reports.length} rapporter`;
   $('filter-count').textContent = chips.length;
   $('filter-open').classList.toggle('active', chips.length > 0);
   $('result-count').textContent = chips.length ? `${shown} av ${reports.length}` : `${reports.length} st`;
@@ -1771,7 +1840,7 @@ function renderList(list) {
   $('report-list').innerHTML = list.map((r) => {
     const own = r.user_id === currentUser?.id;
     return `
-      <li class="report-card ${own ? 'own' : ''}" style="border-left-color:${colorFor(r.user_id)}">
+      <li class="report-card tappable ${own ? 'own' : ''}" data-action="risk" data-id="${r.id}" style="border-left-color:${colorFor(r.user_id)}">
         ${typeBadge(r)}
         <h3><span class="card-icon${r.is_flock ? ' pin-flock' : ''}" style="background:${colorFor(r.user_id)};--c:${colorFor(r.user_id)}">${iconFor(r.species)}</span>
             ${escapeHtml(r.species)} (${countText(r)})</h3>
@@ -1781,13 +1850,15 @@ function renderList(list) {
         <p>${weatherLine(r)}</p>
         <p>👤 ${escapeHtml(nameFor(r.user_id, r.reporter_email))}${own ? ' (du)' : ''}</p>
         ${r.comment ? `<p class="comment">💬 ${escapeHtml(r.comment)}</p>` : ''}
-        <p>${riskPill(r)}</p>
-        <div class="actions">
-          <button class="btn btn-secondary" data-action="risk" data-id="${r.id}">📄 Detaljer</button>
-          <button class="btn btn-secondary" data-action="show" data-id="${r.id}">Visa på kartan</button>
+        <div class="card-foot">
+        <span>${riskPill(r)}</span>
+        <div class="actions card-actions">
+          <button class="btn btn-secondary btn-icon" data-action="risk" data-id="${r.id}" title="Detaljer, väder och risk" aria-label="Detaljer">📄<span class="btn-label">Detaljer</span></button>
+          <button class="btn btn-secondary btn-icon" data-action="show" data-id="${r.id}" title="Visa på kartan" aria-label="Visa på kartan">🗺️<span class="btn-label">Visa på kartan</span></button>
           ${canEdit(r) ? `
-            <button class="btn btn-secondary" data-action="edit" data-id="${r.id}">Redigera</button>
-            <button class="btn btn-danger" data-action="delete" data-id="${r.id}">Ta bort</button>` : ''}
+            <button class="btn btn-secondary btn-icon" data-action="edit" data-id="${r.id}" title="Redigera" aria-label="Redigera">✏️<span class="btn-label">Redigera</span></button>
+            <button class="btn btn-danger btn-icon" data-action="delete" data-id="${r.id}" title="Ta bort" aria-label="Ta bort">🗑️<span class="btn-label">Ta bort</span></button>` : ''}
+        </div>
         </div>
       </li>`;
   }).join('') || `<li class="hint">${reports.length ? 'Inga rapporter matchar filtret.' : 'Inga rapporter än.'}</li>`;
@@ -2865,6 +2936,7 @@ function startDraw() {
   $('draw-message').textContent = '';
   document.body.classList.add('drawing');
   $('map-hint').textContent = 'Ritläge: tryck på kartan för att sätta punkter';
+  showMapHint();
   $('draw-panel').hidden = false;
   // Snabba tryck ska bli punkter, inte zooma kartan
   map.doubleClickZoom.disable();
@@ -2951,6 +3023,7 @@ function switchTab(viewId) {
   if (viewId === 'stats-view') render();
   // Filtret gäller rapporter – det behövs inte i ronderingen
   document.querySelector('.filter-bar').hidden = viewId === 'patrol-view';
+  $('filter-open').hidden = viewId === 'patrol-view';
   onPatrolTab(viewId === 'patrol-view');
   if (viewId === 'map-view') {
     map?.invalidateSize();
@@ -3013,7 +3086,7 @@ function openSheet(report = null) {
 
 function closeSheet() {
   $('sheet').hidden = true;
-  $('map-hint').hidden = false;
+  showMapHint();
   editingId = null;
   removeDraftMarker();
 }

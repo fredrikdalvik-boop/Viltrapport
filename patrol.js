@@ -51,6 +51,7 @@ const patrol = {
 
 const PATROL_RADIUS_KEY = 'viltrapport-patrol-radius';
 const PATROL_QUEUE_KEY = 'viltrapport-patrol-queue';
+const PATROL_COLLAPSED_KEY = 'viltrapport-patrol-collapsed';
 let patrolRadius = (() => {
   try { return Number(localStorage.getItem(PATROL_RADIUS_KEY)) || 50; } catch { return 50; }
 })();
@@ -500,7 +501,7 @@ function initPatrolMap() {
     patrolMap.invalidateSize();
     return;
   }
-  patrolMap = L.map('patrol-map').setView(map ? map.getCenter() : CONFIG.MAP_CENTER, Math.max(map?.getZoom() ?? 0, 14));
+  patrolMap = L.map('patrol-map', { zoomControl: !IS_TOUCH }).setView(map ? map.getCenter() : CONFIG.MAP_CENTER, Math.max(map?.getZoom() ?? 0, 14));
   const streets = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, className: 'tiles-streets',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-bidragsgivare',
@@ -545,7 +546,9 @@ function setMainPatrolGrid(on) {
 }
 function syncPatrolToggle() {
   const on = Boolean(patrolLayer && map?.hasLayer(patrolLayer));
-  $('patrol-toggle').textContent = on ? '🚶 Rutnät: på' : '🚶 Rutnät: av';
+  const text = on ? 'Dölj ronderingsrutor' : 'Visa ronderingsrutor';
+  $('patrol-toggle').title = text;
+  $('patrol-toggle').setAttribute('aria-label', text);
   $('patrol-toggle').setAttribute('aria-pressed', String(on));
   $('patrol-toggle').classList.toggle('on', on);
 }
@@ -637,6 +640,18 @@ function initPatrolUI() {
     renderPatrolBar();
   });
   $('patrol-cfg-save').addEventListener('click', savePatrolConfig);
+  // Fäll ihop panelen så att man ser mer av kartan (valet sparas)
+  const setCollapsed = (on) => {
+    $('patrol-bar').classList.toggle('collapsed', on);
+    $('patrol-collapse').setAttribute('aria-expanded', String(!on));
+    $('patrol-collapse').title = on ? 'Visa hela panelen' : 'Fäll ihop';
+    $('patrol-collapse').setAttribute('aria-label', on ? 'Visa hela panelen' : 'Fäll ihop panelen');
+    try { localStorage.setItem(PATROL_COLLAPSED_KEY, on ? '1' : ''); } catch { /* privat läge */ }
+  };
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(PATROL_COLLAPSED_KEY) === '1'; } catch { /* privat läge */ }
+  setCollapsed(collapsed);
+  $('patrol-collapse').addEventListener('click', () => setCollapsed(!$('patrol-bar').classList.contains('collapsed')));
   $('patrol-bar').querySelector('.patrol-settings').addEventListener('toggle', (e) => {
     $('patrol-bar').classList.toggle('wide', e.target.open);
   });

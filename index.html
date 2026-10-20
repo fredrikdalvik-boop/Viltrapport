@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=22">
+  <link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
   <section id="auth-view" class="auth-view" hidden>
     <div class="auth-col">
       <div class="hero">
-        <img class="hero-img" src="icons/hero.jpg?v=22" width="960" height="960"
+        <img class="hero-img" src="icons/hero.jpg?v=24" width="960" height="960"
              alt="Två jägare med gevär sitter i granskogen i solnedgången med en beagle och en svart labrador. Skylt: Charlies mega-ultra-viltrapport-app">
         <!-- Namnet står på bilden. Texten finns kvar för skärmläsare och fylls i från CONFIG.APP_NAME i config.js -->
         <h1 class="hero-title visually-hidden">
@@ -159,12 +159,15 @@
   <div id="app-view" hidden>
     <header class="topbar">
       <div class="brand">
-        <img class="brand-logo" src="icons/logo.jpg?v=22" alt="" width="64" height="42">
+        <img class="brand-logo" src="icons/logo.jpg?v=24" alt="" width="64" height="42">
         <span class="brand-text">
           <span class="brand-kicker" data-app-name="line1">Charlies</span>
           <span class="brand-name" data-app-name="rest">mega-ultra-viltrapport-app</span>
         </span>
       </div>
+      <button type="button" id="filter-open" class="filter-btn" aria-label="Filter" title="Filter">
+        <span aria-hidden="true">🔍</span><span class="filter-label">Filter</span><span id="filter-count" class="filter-badge" hidden></span>
+      </button>
       <button id="settings-btn" class="icon-btn" aria-label="Inställningar" title="Inställningar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="3"/>
@@ -175,9 +178,8 @@
 
     <div id="offline-banner" class="banner" hidden>Ingen uppkoppling – rapporter kan inte sparas just nu.</div>
 
-    <!-- Filterrad: syns både på kartan och i listan -->
+    <!-- Aktiva filter (på mobil syns raden bara när något filter är valt) -->
     <div class="filter-bar">
-      <button type="button" id="filter-open" class="filter-btn">🔍 Filter<span id="filter-count" class="filter-badge" hidden></span></button>
       <div id="filter-chips" class="filter-chips"></div>
       <span id="result-count" class="result-count"></span>
     </div>
@@ -187,7 +189,9 @@
       <section id="map-view" class="view">
         <div id="map"></div>
         <div class="map-hint" id="map-hint">Tryck på kartan där du såg djuret</div>
-        <button type="button" id="patrol-toggle" class="patrol-open" aria-pressed="false">🚶 Rutnät: av</button>
+        <!-- Flyttas in i kartans knappkolumn (MapTools i app.js) -->
+        <button type="button" id="locate-btn" class="map-tool" title="Visa var jag är" aria-label="Visa var jag är">📍<span class="tool-label">Min plats</span></button>
+        <button type="button" id="patrol-toggle" class="map-tool" aria-pressed="false" title="Visa ronderingsrutor" aria-label="Visa ronderingsrutor">🚶<span class="tool-label">Rutnät</span></button>
       </section>
 
       <!-- Rondering: egen karta med rutnätet -->
@@ -197,6 +201,7 @@
         <div id="patrol-bar" class="patrol-bar">
           <div class="patrol-head">
             <p id="patrol-status" class="patrol-status" role="status"></p>
+            <button type="button" id="patrol-collapse" class="patrol-collapse" aria-expanded="true" aria-label="Fäll ihop panelen" title="Fäll ihop">⌃</button>
           </div>
           <p id="patrol-warning" class="message" role="alert" hidden></p>
           <p id="patrol-queue" class="hint" hidden></p>
@@ -543,11 +548,11 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=22"></script>
-  <script src="species.js?v=22"></script>
-  <script src="risk.js?v=22"></script>
-  <script src="weather.js?v=22"></script>
-  <script src="patrol.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="config.js?v=24"></script>
+  <script src="species.js?v=24"></script>
+  <script src="risk.js?v=24"></script>
+  <script src="weather.js?v=24"></script>
+  <script src="patrol.js?v=24"></script>
+  <script src="app.js?v=24"></script>
 </body>
 </html>
