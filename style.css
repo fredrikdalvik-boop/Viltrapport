@@ -1332,3 +1332,80 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
 .patrol-obs-row { display: flex; flex-direction: column; gap: 4px; }
 .patrol-obs-row .chipset { flex-wrap: nowrap; }
 .patrol-obs-row .chipset button { flex: 1; min-height: 34px; padding: 0 6px; }
+
+/* Ny version finns */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #1565c0;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+.update-banner span { flex: 1; min-width: 0; }
+.update-btn {
+  flex: none;
+  min-height: 38px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: #fff;
+  color: #1565c0;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.update-later { flex: none; border: none; background: none; color: #fff; font-size: 18px; padding: 4px 6px; cursor: pointer; }
+
+/* Rondering: små knappar för färgläge och fickläge */
+.patrol-chip {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 2px solid var(--border);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.patrol-chip.selected { border-color: #0072b2; background: #0072b2; color: #fff; }
+.patrol-bar.collapsed #patrol-pocket { display: block; }
+
+/* Fickläge: svart skärm (drar lite ström på mobiler med OLED-skärm) */
+.pocket {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: #000;
+  color: #555;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(40px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom));
+  text-align: center;
+  touch-action: none;
+  user-select: none;
+}
+.pocket-status { margin: 0; font-size: 15px; }
+.pocket-exit {
+  width: 100%;
+  max-width: 340px;
+  min-height: 64px;
+  border: 2px solid #333;
+  border-radius: 999px;
+  background: #0a0a0a;
+  color: #666;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  background-image: linear-gradient(90deg, #1b3a2a 0 0);
+  background-repeat: no-repeat;
+  background-size: 0 100%;
+}
+.pocket-exit.holding { background-size: 100% 100%; transition: background-size 1s linear; color: #bbb; }

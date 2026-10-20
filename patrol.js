@@ -156,16 +156,42 @@ function drawPatrolBorder() {
 
 // ---------- Färger ----------
 
-const PATROL_RED = 'hsl(4, 80%, 48%)';
+// Två färgscheman. "Kromosom-läge" = färger som går att skilja åt även vid färgblindhet
+// (blått/orange/vinrött från Okabe–Ito och Tol, kontrollerade för rött-grön- och blå-gul-blindhet).
+const PATROL_PALETTES = {
+  normal: { fresh: 'hsl(130, 65%, 38%)', mid: 'hsl(30, 85%, 48%)', old: 'hsl(4, 80%, 48%)', names: ['grönt', 'orange', 'rött'] },
+  cvd:    { fresh: '#0072b2', mid: '#e69f00', old: '#882255', names: ['blått', 'orange', 'vinrött'] },
+};
+const PATROL_CVD_KEY = 'viltrapport-patrol-cvd';
+let patrolCvd = (() => { try { return localStorage.getItem(PATROL_CVD_KEY) === '1'; } catch { return false; } })();
+const patrolPalette = () => PATROL_PALETTES[patrolCvd ? 'cvd' : 'normal'];
+const patrolOldColor = () => patrolPalette().old;
+
+// Blanda två #rrggbb-färger (t = 0 → a, t = 1 → b)
+function mixHex(a, b, t) {
+  const n = (h, i) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  return `rgb(${[0, 1, 2].map((i) => Math.round(n(a, i) + (n(b, i) - n(a, i)) * t)).join(',')})`;
+}
 
 // Ålder i dagar → färg. null = aldrig ronderad.
 function patrolColor(ageDays) {
   const x = patrolCfg.greenDays;
-  if (ageDays == null || ageDays >= 2 * x) return PATROL_RED;
-  if (ageDays <= x) return 'hsl(130, 65%, 38%)';
-  // Grön → orange → röd under nästa period (snabbt mot orange, sedan sakta mot rött)
+  const pal = patrolPalette();
+  if (ageDays == null || ageDays >= 2 * x) return pal.old;
+  if (ageDays <= x) return pal.fresh;
   const t = (ageDays - x) / x;
+  // Kromosom-läge: orange → vinrött (blått används bara för nyss ronderat)
+  if (patrolCvd) return mixHex(pal.mid, pal.old, t);
+  // Grön → orange → röd under nästa period (snabbt mot orange, sedan sakta mot rött)
   return `hsl(${Math.round(100 * (1 - t) ** 1.4)}, 85%, 46%)`;
+}
+
+function setPatrolCvd(on) {
+  patrolCvd = on;
+  try { localStorage.setItem(PATROL_CVD_KEY, on ? '1' : ''); } catch { /* privat läge */ }
+  redrawPatrol();
+  renderPatrolBar();
+  if (typeof renderPatrolStats === 'function' && !$('stats-view').hidden) renderPatrolStats();
 }
 
 function patrolState(ageDays) {
@@ -422,15 +448,53 @@ function stopPatrolGps() {
   patrol.circle?.remove();
   patrol.marker = null;
   patrol.circle = null;
+  if (!$('pocket').hidden) closePocket();
   flushPatrolQueue();
   redrawPatrol();
   renderPatrolBar();
 }
 
-// Skärmlåset släpps när man byter app – ta tillbaka det när man kommer tillbaka
+// Skärmlåset släpps när man byter app eller släcker skärmen – ta tillbaka det när man kommer tillbaka.
+// En webbapp får inte läsa GPS:en när skärmen är släckt, så säg till om det blev ett glapp.
+let patrolHiddenAt = null;
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && patrol.gps) keepScreenOn();
+  if (document.visibilityState === 'hidden') {
+    patrolHiddenAt = patrol.gps ? Date.now() : null;
+    return;
+  }
+  if (!patrol.gps) return;
+  keepScreenOn();
+  const gone = patrolHiddenAt ? (Date.now() - patrolHiddenAt) / 1000 : 0;
+  patrolHiddenAt = null;
+  if (gone > 20) {
+    const min = Math.round(gone / 60);
+    showToast(`GPS:en var pausad ${min < 1 ? 'en kort stund' : `i ${min} min`} när skärmen var släckt. Använd 🌙 Fickläge nästa gång.`);
+  }
 });
+
+// ---------- Fickläge ----------
+// Svart skärm som drar lite ström. Skärmen är tekniskt på, så GPS:en fortsätter.
+// Avsluta genom att hålla in knappen en sekund (så att det inte händer av misstag i fickan).
+let pocketTimer = null;
+let pocketHold = null;
+function openPocket() {
+  if (!patrol.gps) return;
+  $('pocket').hidden = false;
+  keepScreenOn();
+  updatePocket();
+  pocketTimer = setInterval(updatePocket, 5000);
+}
+function closePocket() {
+  $('pocket').hidden = true;
+  clearInterval(pocketTimer);
+  renderPatrolBar();
+}
+function updatePocket() {
+  if ($('pocket').hidden) return;
+  if (!patrol.gps) { closePocket(); return; }
+  const acc = patrol.pos ? `GPS ±${Math.round(patrol.pos.accuracy)} m` : 'Söker GPS …';
+  $('pocket-status').textContent = `🚶 Rondering pågår · ${patrol.sessionCells} nya rutor · ${acc}`;
+}
 window.addEventListener('online', () => flushPatrolQueue());
 
 // ---------- Markera rutor själv ----------
@@ -652,12 +716,16 @@ function renderPatrolBar() {
   $('patrol-queue').hidden = !queued || (navigator.onLine && !patrol.flushFailed);
   $('patrol-queue').textContent = `☁️ ${queued} ${queued === 1 ? 'ruta' : 'rutor'} väntar på nät och skickas automatiskt`;
 
+  const pal = patrolPalette();
   $('patrol-coverage').innerHTML = `
-    <span class="pc pc-green" style="flex:${c.green || 0.001}"></span><span class="pc pc-orange" style="flex:${c.orange || 0.001}"></span><span class="pc pc-red" style="flex:${c.red || 0.001}"></span>`;
+    <span class="pc" style="flex:${c.green || 0.001};background:${pal.fresh}"></span><span class="pc" style="flex:${c.orange || 0.001};background:${pal.mid}"></span><span class="pc" style="flex:${c.red || 0.001};background:${pal.old}"></span>`;
   $('patrol-legend').innerHTML = `
-    <span><i class="sw" style="background:${patrolColor(0)}"></i>${pct(c.green)} % grönt (0–${x} d)</span>
-    <span><i class="sw" style="background:${patrolColor(x * 1.4)}"></i>${pct(c.orange)} % orange</span>
-    <span><i class="sw" style="background:${PATROL_RED}"></i>${pct(c.red)} % rött (${2 * x}+ d)</span>`;
+    <span><i class="sw" style="background:${patrolColor(0)}"></i>${pct(c.green)} % ${pal.names[0]} (0–${x} d)</span>
+    <span><i class="sw" style="background:${patrolColor(x * 1.4)}"></i>${pct(c.orange)} % ${pal.names[1]}</span>
+    <span><i class="sw" style="background:${pal.old}"></i>${pct(c.red)} % ${pal.names[2]} (${2 * x}+ d)</span>`;
+  $('patrol-cvd').classList.toggle('selected', patrolCvd);
+  $('patrol-cvd').setAttribute('aria-pressed', String(patrolCvd));
+  $('patrol-pocket').hidden = !patrol.gps;
 
   $('patrol-radius').innerHTML = PATROL.RADII.map((r) =>
     `<button type="button" data-radius="${r}" class="${r === patrolRadius ? 'selected' : ''}">${r} m</button>`).join('');
@@ -728,6 +796,19 @@ function initPatrolUI() {
     renderPatrolBar();
   });
   $('patrol-cfg-save').addEventListener('click', savePatrolConfig);
+  $('patrol-cvd').addEventListener('click', () => setPatrolCvd(!patrolCvd));
+  $('patrol-pocket').addEventListener('click', openPocket);
+  // Håll in en sekund för att lämna fickläget
+  const exit = $('pocket-exit');
+  const startHold = (e) => {
+    e.preventDefault();
+    exit.classList.add('holding');
+    pocketHold = setTimeout(() => { exit.classList.remove('holding'); closePocket(); }, 1000);
+  };
+  const stopHold = () => { clearTimeout(pocketHold); exit.classList.remove('holding'); };
+  exit.addEventListener('pointerdown', startHold);
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => exit.addEventListener(ev, stopHold));
+  exit.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') closePocket(); });
   // Fäll ihop panelen så att man ser mer av kartan (valet sparas)
   const setCollapsed = (on) => {
     $('patrol-bar').classList.toggle('collapsed', on);

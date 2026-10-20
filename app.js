@@ -2173,9 +2173,9 @@ function renderPatrolStats() {
   $('stats-patrol').innerHTML = `
     <h3>🚶 Rondering<small>följer inte filtret · rutor ${patrolCfg.grid} × ${patrolCfg.grid} m</small></h3>
     <div class="stats-kpis patrol-kpis">
-      <div class="kpi"><strong style="color:${patrolColor(0)}">${pct(c.green)} %</strong><span>grönt (0–${x} d)</span></div>
-      <div class="kpi"><strong style="color:${patrolColor(x * 1.5)}">${pct(c.orange)} %</strong><span>orange</span></div>
-      <div class="kpi"><strong style="color:${PATROL_RED}">${pct(c.red)} %</strong><span>rött</span></div>
+      <div class="kpi"><strong style="color:${patrolColor(0)}">${pct(c.green)} %</strong><span>${patrolPalette().names[0]} (0–${x} d)</span></div>
+      <div class="kpi"><strong style="color:${patrolColor(x * 1.4)}">${pct(c.orange)} %</strong><span>${patrolPalette().names[1]}</span></div>
+      <div class="kpi"><strong style="color:${patrolOldColor()}">${pct(c.red)} %</strong><span>${patrolPalette().names[2]}</span></div>
     </div>
     <h4 class="risk-section">Ronderade rutor per person, 30 dagar</h4>
     ${st.byUser.map(([id, v]) => bar(nameFor(id), v, maxUser, total)).join('') || '<p class="hint">Ingen rondering de senaste 30 dagarna.</p>'}
@@ -3325,3 +3325,35 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('Service worker:', err));
   });
 }
+
+// ---------- Ny version ----------
+// Jämför versionsnumret (?v= på app.js) med det som finns på servern just nu.
+// Finns en nyare version visas en rad med knappen "Uppdatera".
+
+const APP_VERSION = Number(document.querySelector('script[src*="app.js"]')?.src.match(/[?&]v=(\d+)/)?.[1] ?? 0);
+
+async function checkForUpdate() {
+  if (!navigator.onLine || !APP_VERSION) return;
+  try {
+    const html = await (await fetch(`./index.html?check=${Date.now()}`, { cache: 'no-store' })).text();
+    const latest = Number(html.match(/app\.js\?v=(\d+)/)?.[1] ?? 0);
+    if (latest > APP_VERSION) $('update-banner').hidden = false;
+  } catch { /* inget nät – försök igen senare */ }
+}
+
+$('update-btn').addEventListener('click', async () => {
+  $('update-btn').disabled = true;
+  $('update-btn').textContent = 'Uppdaterar …';
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    await reg?.update();
+  } catch { /* laddar om ändå */ }
+  location.reload();
+});
+$('update-later').addEventListener('click', () => { $('update-banner').hidden = true; });
+
+setTimeout(checkForUpdate, 4000);
+setInterval(checkForUpdate, 15 * 60 * 1000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkForUpdate();
+});

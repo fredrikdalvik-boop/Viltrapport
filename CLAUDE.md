@@ -191,7 +191,13 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   ronderingskartan och öppnar vanliga formuläret (samma position läggs i `draftMarker` på vanliga kartan). `removeDraftMarker()` tar bort båda.
 - Observationer på ronderingskartan: "Dölj/Visa" (`#patrol-obs`, `setPatrolObs()`, `layerPrefs.patrolObs`). Lagret `patrolObsLayer` fylls av
   `renderMarkers()` → `fillMarkers(layer, list)` och följer filtret. Filterknapp/filterrad syns i fliken bara när observationerna visas (`updatePatrolFilterUI()`).
-- Hopfälld panel: status, GPS, Markera rutor och Ny observation syns (bara "Till mig" och resten döljs).
+- Hopfälld panel: status, GPS, Markera rutor, Ny observation och Fickläge syns (resten döljs).
+- **🧬 Kromosom-läge** (`#patrol-cvd`, `setPatrolCvd()`, `localStorage` `viltrapport-patrol-cvd`): färgblindvänliga färger i `PATROL_PALETTES.cvd`
+  (blått #0072b2 = ronderat, orange #e69f00 → vinrött #882255). Kontrollerade med dataviz-validatorn (CVD ΔE ≥ 14). Namnen (`names`) används i förklaring och statistik.
+  Använd alltid `patrolPalette()`/`patrolColor()`/`patrolOldColor()` – inga hårdkodade ronderingsfärger.
+- **GPS med släckt skärm går inte i en webbapp** (webbläsaren stoppar platsen). Lösningar i appen: Wake Lock + **🌙 Fickläge** (`#pocket`, svart skärm,
+  GPS fortsätter, håll in knappen 1 s för att avsluta). Släcks skärmen ändå visas ett meddelande om glappet när man kommer tillbaka (`patrolHiddenAt`).
+  Riktig bakgrunds-GPS kräver en inbyggd app (t.ex. Capacitor + bakgrundsplats-plugin).
 - Statistik: kortet `#stats-patrol` (andel grönt/orange/rött, rutor per person och GPS/manuellt, 30 dagar). Excel: fliken "Rondering".
 - `fetchAll()` i app.js hämtar sida för sida (Supabase ger max 1000 rader per anrop) – används för rapporter och rondering.
 
@@ -220,4 +226,6 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 ## Utveckling
 - Testa lokalt: `python3 -m http.server 8000` och öppna http://localhost:8000
 - Vid varje ändring: öka `?v=` på css/js i `index.html` och `CACHE` i `sw.js` (samma nummer). Annars kan gamla filer ligga kvar i webbläsaren.
+- **Ny version-raden** (`#update-banner`, `checkForUpdate()`): appen jämför sitt eget `app.js?v=` med det i `index.html` på servern
+  (vid start, var 15:e minut och när appen visas igen). Högre nummer → "🆕 En ny version finns" + Uppdatera. Därför måste `?v=` alltid höjas.
 - Git-gren för arbete: `claude/wildlife-reporting-pwa-hawg43`.
