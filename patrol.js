@@ -358,10 +358,10 @@ function onPatrolPosition(p) {
       patrol.marker.setLatLng([lat, lng]);
       patrol.circle.setLatLng([lat, lng]).setRadius(patrolRadius);
     }
-    // Följ med på kartan: centrera första gången och när man närmar sig kanten
+    // Följ med på kartan: visa dig första gången och när du närmar dig kanten (panelen till höger räknas bort)
     if (patrol.open) {
-      if (first) patrolMap.setView([lat, lng], Math.max(patrolMap.getZoom(), 16));
-      else if (!patrolMap.getBounds().pad(-0.2).contains([lat, lng])) patrolMap.panTo([lat, lng]);
+      if (first) patrolMap.setZoom(Math.max(patrolMap.getZoom(), 16), { animate: false });
+      followMe([lat, lng]);
     }
   }
 
@@ -488,6 +488,12 @@ function patrolCoverage() {
   return { ...count, total: list.length };
 }
 
+// Håll positionen synlig i den del av kartan som inte täcks av panelen
+function followMe(latlng) {
+  const panel = $('patrol-bar').offsetWidth || 0;
+  patrolMap.panInside(latlng, { paddingTopLeft: [50, 60], paddingBottomRight: [panel + 50, 60] });
+}
+
 // Ronderingsflikens karta skapas första gången fliken visas (Leaflet behöver synlig storlek)
 function initPatrolMap() {
   if (patrolMap) {
@@ -503,7 +509,9 @@ function initPatrolMap() {
     maxZoom: 19, attribution: 'Bild &copy; Esri &mdash; Källa: Esri, Maxar, Earthstar Geographics och GIS User Community',
   });
   (layerPrefs.patrolBase === 'Satellit' ? satellite : streets).addTo(patrolMap);
-  L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true }).addTo(patrolMap);
+  // Panelen ligger till höger – lagerknapp och upphovstext till vänster
+  L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true, position: 'topleft' }).addTo(patrolMap);
+  patrolMap.attributionControl.setPosition('bottomleft');
   patrolMap.on('baselayerchange', (e) => saveLayerPrefs({ patrolBase: e.name }));
   patrolMapLayer = createPatrolLayer(patrolMap, 0.42).addTo(patrolMap);
   drawPatrolBorder();
@@ -517,7 +525,7 @@ function onPatrolTab(visible) {
   initPatrolMap();
   // Startar man fliken med GPS igång: visa var man är
   if (patrol.pos && !patrol.marker) onPatrolPosition({ coords: { latitude: patrol.pos.lat, longitude: patrol.pos.lng, accuracy: patrol.pos.accuracy } });
-  else if (patrol.pos) patrolMap.setView([patrol.pos.lat, patrol.pos.lng]);
+  else if (patrol.pos) followMe([patrol.pos.lat, patrol.pos.lng]);
   renderPatrolBar();
 }
 
@@ -616,7 +624,9 @@ function initPatrolUI() {
     renderPatrolBar();
   });
   $('patrol-center').addEventListener('click', () => {
-    if (patrol.pos) patrolMap?.setView([patrol.pos.lat, patrol.pos.lng], Math.max(patrolMap.getZoom(), 16));
+    if (!patrol.pos || !patrolMap) return;
+    patrolMap.setZoom(Math.max(patrolMap.getZoom(), 16), { animate: false });
+    followMe([patrol.pos.lat, patrol.pos.lng]);
   });
   $('patrol-radius').addEventListener('click', (e) => {
     const b = e.target.closest('[data-radius]');
@@ -627,6 +637,9 @@ function initPatrolUI() {
     renderPatrolBar();
   });
   $('patrol-cfg-save').addEventListener('click', savePatrolConfig);
+  $('patrol-bar').querySelector('.patrol-settings').addEventListener('toggle', (e) => {
+    $('patrol-bar').classList.toggle('wide', e.target.open);
+  });
 }
 
 // ---------- Statistik och export ----------

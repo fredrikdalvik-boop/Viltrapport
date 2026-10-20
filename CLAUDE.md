@@ -162,7 +162,8 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   i statistiken (`STAT_DIMS`/`STAT_CARDS`, och vid behov i filtret). Föreslå dem gärna.
 
 ## Rondering (`patrol.js`)
-- Egen flik "🚶 Rondering" (`#patrol-view`) med egen karta `patrolMap` (skapas första gången fliken visas, `initPatrolMap()`) och panelen `#patrol-bar`.
+- Egen flik "🚶 Rondering" (`#patrol-view`) med egen karta `patrolMap` (skapas första gången fliken visas, `initPatrolMap()`) och panelen `#patrol-bar`
+  som smal kolumn till höger (142px, `.wide` = 320px när "Mer" är öppet). Lagerknapp och upphovstext ligger till vänster. `followMe()` håller positionen synlig bredvid panelen.
   `switchTab()` anropar `onPatrolTab()` och döljer filterraden i fliken. GPS fortsätter när man byter flik.
 - På vanliga kartan visar/döljer knappen `#patrol-toggle` ("🚶 Rutnät: av/på") rutnätet (`setMainPatrolGrid()`, av som standard, `layerPrefs.patrol`).
   Två lager: `patrolLayer` (vanliga kartan) och `patrolMapLayer` – rita om båda med `redrawPatrol()`.
