@@ -27,7 +27,8 @@ sågs, fyller i art och antal, och sparar. Alla inloggade ser allas rapporter.
    och registrera åtgärd (t.ex. Skrämselskott). Risken ligger kvar tills en åtgärd registrerats.
 6. **Admin:** ritar banor, taxibanor och stängsel under ⚠️ Risk → **Rita ny zon**, och ändrar hur risken
    räknas under ⚠️ Risk → **Ändra riskinställningar** (standardvärdena finns i `risk.js`).
-7. **🚶 Rondering** (knappen nere till vänster på kartan): rutorna är röda tills någon ronderat dem.
+7. **🚶 Rondering** (egen flik): rutorna är röda tills någon ronderat dem.
+   På vanliga kartan visar du rutnätet med knappen **🚶 Rutnät** nere till vänster.
    - **▶ Starta GPS:** rutorna inom radien kring dig blir gröna medan du går eller kör. Håll appen öppen.
    - **✋ Markera själv:** tryck på rutor du ser, t.ex. med kikare. Tryck igen för att ångra.
    - En ruta är grön i 7 dagar, blir sedan orange och till sist röd. Admin ändrar tiden och rutstorleken under "Mer".

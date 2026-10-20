@@ -809,7 +809,7 @@ async function handleSession(session) {
   if (!currentUser) {
     reports = [];
     isAdmin = false;
-    if (patrol.open) closePatrol();
+    stopPatrol();
     // Byt inte bort t.ex. "Skapa konto" om man redan står där
     if ($('auth-view').hidden || ['code', 'password'].includes(currentPanel())) showView('login');
     return;
@@ -1037,13 +1037,14 @@ function initMap() {
   });
   drawRiskZones();
 
-  // Rondering: rutor som är röda tills de ronderats
-  createPatrolLayer();
-  if (layerPrefs.patrol !== false) patrolLayer.addTo(map);
-  layersControl.addOverlay(patrolLayer, '🚶 Rondering');
+  // Ronderingens rutnät: av som standard här (allt om rondering finns i fliken Rondering)
+  patrolLayer = createPatrolLayer(map);
+  if (layerPrefs.patrol === true) patrolLayer.addTo(map);
+  layersControl.addOverlay(patrolLayer, '🚶 Ronderingsrutor');
   map.on('overlayadd overlayremove', (e) => {
-    if (e.layer === patrolLayer) saveLayerPrefs({ patrol: e.type === 'overlayadd' });
+    if (e.layer === patrolLayer) setMainPatrolGrid(e.type === 'overlayadd');
   });
+  syncPatrolToggle();
 
   markerLayer = L.layerGroup().addTo(map);
 
@@ -1054,8 +1055,6 @@ function initMap() {
       addDrawPoint(e.latlng);
       return;
     }
-    // Markerar man rutor i ronderingen blir trycket en ronderad ruta
-    if (patrolMapClick(e.latlng)) return;
     // Är filterpanelen öppen stänger första trycket bara den
     if (!$('filter-sheet').hidden) {
       closeFilter();
@@ -2950,6 +2949,9 @@ function switchTab(viewId) {
   document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== viewId; });
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === viewId));
   if (viewId === 'stats-view') render();
+  // Filtret gäller rapporter – det behövs inte i ronderingen
+  document.querySelector('.filter-bar').hidden = viewId === 'patrol-view';
+  onPatrolTab(viewId === 'patrol-view');
   if (viewId === 'map-view') {
     map?.invalidateSize();
   } else {
@@ -3011,7 +3013,7 @@ function openSheet(report = null) {
 
 function closeSheet() {
   $('sheet').hidden = true;
-  $('map-hint').hidden = patrol.open;
+  $('map-hint').hidden = false;
   editingId = null;
   removeDraftMarker();
 }

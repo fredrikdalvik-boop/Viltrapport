@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=20">
+  <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 
@@ -32,11 +32,10 @@
   <section id="auth-view" class="auth-view" hidden>
     <div class="auth-col">
       <div class="hero">
-        <img class="hero-img" src="icons/hero-scene.svg?v=20"
-             alt="Två jägare med gevär på ryggen går med en labrador och en beagle i granskogen i solnedgången">
-        <div class="hero-scrim"></div>
-        <!-- Appens namn fylls i från CONFIG.APP_NAME i config.js -->
-        <h1 class="hero-title">
+        <img class="hero-img" src="icons/hero.jpg?v=21" width="960" height="960"
+             alt="Två jägare med gevär sitter i granskogen i solnedgången med en beagle och en svart labrador. Skylt: Charlies mega-ultra-viltrapport-app">
+        <!-- Namnet står på bilden. Texten finns kvar för skärmläsare och fylls i från CONFIG.APP_NAME i config.js -->
+        <h1 class="hero-title visually-hidden">
           <span class="t1" data-app-name="line1">Charlies</span>
           <span class="t2" data-app-name="line2">mega-ultra-</span>
           <span class="t3" data-app-name="line3">viltrapport-app</span>
@@ -160,21 +159,7 @@
   <div id="app-view" hidden>
     <header class="topbar">
       <div class="brand">
-        <span class="brand-logo" aria-hidden="true">
-          <svg viewBox="0 0 32 32">
-            <defs>
-              <linearGradient id="brandSky" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#2a2548"/>
-                <stop offset=".6" stop-color="#b8603f"/>
-                <stop offset="1" stop-color="#e39a5a"/>
-              </linearGradient>
-            </defs>
-            <rect width="32" height="32" fill="url(#brandSky)"/>
-            <circle cx="20" cy="21" r="6.5" fill="#ffd79a"/>
-            <path d="M10 6 L14.5 13 H12.5 L16 19 H13.5 L17 25 H3 L6.5 19 H4 L7.5 13 H5.5 Z" fill="#101218"/>
-            <path d="M0 25 Q16 22 32 25 V32 H0 Z" fill="#101218"/>
-          </svg>
-        </span>
+        <img class="brand-logo" src="icons/logo.jpg?v=21" alt="" width="64" height="42">
         <span class="brand-text">
           <span class="brand-kicker" data-app-name="line1">Charlies</span>
           <span class="brand-name" data-app-name="rest">mega-ultra-viltrapport-app</span>
@@ -202,13 +187,16 @@
       <section id="map-view" class="view">
         <div id="map"></div>
         <div class="map-hint" id="map-hint">Tryck på kartan där du såg djuret</div>
-        <button type="button" id="patrol-open" class="patrol-open">🚶 Rondering</button>
+        <button type="button" id="patrol-toggle" class="patrol-open" aria-pressed="false">🚶 Rutnät: av</button>
+      </section>
 
-        <!-- Rondering: kompakt panel längst ner på kartan (resten under "Mer") -->
-        <div id="patrol-bar" class="patrol-bar" hidden>
+      <!-- Rondering: egen karta med rutnätet -->
+      <section id="patrol-view" class="view" hidden>
+        <div id="patrol-map"></div>
+        <!-- Panelen längst ner (resten under "Mer") -->
+        <div id="patrol-bar" class="patrol-bar">
           <div class="patrol-head">
             <p id="patrol-status" class="patrol-status" role="status"></p>
-            <button type="button" id="patrol-close" class="patrol-x" aria-label="Stäng ronderingen">✕</button>
           </div>
           <p id="patrol-warning" class="message" role="alert" hidden></p>
           <p id="patrol-queue" class="hint" hidden></p>
@@ -297,6 +285,7 @@
       <button class="tab active" data-view="map-view"><span class="tab-icon">🗺️</span>Karta</button>
       <button class="tab" data-view="list-view"><span class="tab-icon">📋</span>Lista</button>
       <button class="tab" data-view="risk-view"><span class="tab-icon">⚠️</span>Risk</button>
+      <button class="tab" data-view="patrol-view"><span class="tab-icon">🚶</span>Rondering</button>
       <button class="tab" data-view="stats-view"><span class="tab-icon">📊</span>Statistik</button>
     </nav>
 
@@ -554,11 +543,11 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=20"></script>
-  <script src="species.js?v=20"></script>
-  <script src="risk.js?v=20"></script>
-  <script src="weather.js?v=20"></script>
-  <script src="patrol.js?v=20"></script>
-  <script src="app.js?v=20"></script>
+  <script src="config.js?v=21"></script>
+  <script src="species.js?v=21"></script>
+  <script src="risk.js?v=21"></script>
+  <script src="weather.js?v=21"></script>
+  <script src="patrol.js?v=21"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>

@@ -33,7 +33,8 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 | `weather.js` | `window.WEATHER`: väder från Open-Meteo, gränser för vädermarkörer (`LIMITS`, `TAGS`), ljus (solhöjd), tid på dygnet, `fetchFor()`, `analyze()` |
 | `patrol.js` | Rondering: rutnät, färger, GPS (`watchPosition`), manuell markering, kö för offline, panelen `#patrol-bar`. Laddas före app.js och använder app.js globala variabler när den körs |
 | `species.js` | `SPECIES_GROUPS` (grupp → etikett + emoji-ikon, ev. `fallback`), `SPECIES` (`[namn, grupp]`, ca 300 arter), `QUICK_PICKS` (snabbval "okänd art"), `BIRD_POSITIONS`, `HABITATS` |
-| `icons/hero-scene.svg` | Startsidans illustration från Claude Design (viewBox 480×440, `xMidYMax slice`). Används som den är. Himlens gradient ligger på `.hero` i CSS |
+| `icons/hero.jpg` | Startsidans bild (960×960, kvadratisk, med appens namn på en skylt). Rubriken `.hero-title` finns kvar men är `visually-hidden` |
+| `icons/logo.jpg` | Loggan i toppen (skylten utklippt ur startbilden, 214×140) |
 | `sw.js` | Service worker. Egna filer: network-first. CDN: cache-first. Supabase och kartbilder cachas inte |
 | `manifest.json`, `icons/` | PWA-installation |
 | `supabase.sql` | Tabell, trigger och RLS-policies. Klistras in i Supabase SQL Editor |
@@ -54,11 +55,11 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   Mörka värden finns två gånger: `:root[data-theme="dark"]` och `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])` – ändra båda.
 - Val under ⚙️ (Auto/Ljust/Mörkt) sparas i `localStorage` (`viltrapport-theme`). Ett litet skript i `<head>` sätter `data-theme` innan sidan ritas.
 - Vanliga kartan (`className: 'tiles-streets'`) inverteras i mörkt tema; satellit lämnas orörd.
-- Toppen (`.topbar`, `--topbar-bg`) är mörk i båda temana: logga (inline-SVG) + `brand-kicker` (line1) + `brand-name` (`data-app-name="rest"` = line2+line3).
+- Toppen (`.topbar`, `--topbar-bg`) är mörk i båda temana: logga (`icons/logo.jpg`, höjd 42px) + `brand-kicker` (line1) + `brand-name` (`data-app-name="rest"` = line2+line3).
 - Paneler (`.sheet`): tät layout, rubriken (`h2`) och knappraden (`.sheet-buttons`) är `position: sticky` så att Avbryt/Spara alltid syns.
 
 ## Design (inloggning)
-- Inloggningsvyn följer designpaketet från Claude Design: bakgrund `#101218`, kolumn max 480px, hero 440px,
+- Inloggningsvyn följer designpaketet från Claude Design: bakgrund `#101218`, kolumn max 480px, hero = kvadratisk bild + 30px mörk yta,
   kort `#fbfaf7` som överlappar heron med 44px. Typsnitt: EB Garamond (rubriker), Source Sans 3 (UI).
   Färger: primär `#c8603d`, länk `#1f5b3c`, fel `#b3261e`.
 - Allt inloggningsrelaterat ligger i `#auth-view` som paneler (`data-panel`): login, forgot, signup, code, password.
@@ -161,9 +162,14 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   i statistiken (`STAT_DIMS`/`STAT_CARDS`, och vid behov i filtret). Föreslå dem gärna.
 
 ## Rondering (`patrol.js`)
+- Egen flik "🚶 Rondering" (`#patrol-view`) med egen karta `patrolMap` (skapas första gången fliken visas, `initPatrolMap()`) och panelen `#patrol-bar`.
+  `switchTab()` anropar `onPatrolTab()` och döljer filterraden i fliken. GPS fortsätter när man byter flik.
+- På vanliga kartan visar/döljer knappen `#patrol-toggle` ("🚶 Rutnät: av/på") rutnätet (`setMainPatrolGrid()`, av som standard, `layerPrefs.patrol`).
+  Två lager: `patrolLayer` (vanliga kartan) och `patrolMapLayer` – rita om båda med `redrawPatrol()`.
+- Ändras yttergränsen (ny GPX-fil eller `setPatrolBorder()`) räknas rutorna om och nya rutor fylls i. Besök sparas som lat/lng och behåller färgen.
 - Kartan delas i rutor (standard 100 × 100 m, admin väljer 50–500 m) inom GPX-filens yttergräns (`setPatrolBorder()` från `loadAreas()`;
   utan gräns ±4 km kring mitten). Rutorna räknas i meter från `CONFIG.MAP_CENTER` (`cellAt`, `cellBounds`, nyckel `"i:j"`).
-- Ritas av ett eget canvaslager (`L.GridLayer`, pane `patrolPane` z 350, opacity 0.38, från zoom 11). Lager "🚶 Rondering" i lagerknappen (`layerPrefs.patrol`).
+- Ritas av ett eget canvaslager (`PatrolGrid`, `L.GridLayer`, pane `patrolPane` z 350, från zoom 11). Även "🚶 Ronderingsrutor" i vanliga kartans lagerknapp.
 - Färg efter senaste besök: grön i `greenDays` dagar (1–30, standard 7), sedan gradvis orange under lika lång tid, röd efter 2 × greenDays eller aldrig (`patrolColor`).
 - Tabell `patrol_visits (id, user_id, lat, lng, method gps|manual, visited_at)`: bara rutans mittpunkt sparas, inte GPS-spåret.
   Trigger `patrol_visits_stamp` sätter `user_id = auth.uid()` och begränsar tiden (max 30 dagar bakåt, aldrig framtid). Medlemmar läser/skapar, egna eller admin tar bort.
@@ -171,7 +177,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - GPS: `watchPosition` (hög noggrannhet), sämre än ±100 m markerar inget. Rutor som nuddar radien (25/50/100/200 m, sparas per person i `localStorage`) blir gröna.
   Samma person i samma ruta sparas högst en gång per 2 h. Skärmen hålls tänd (Wake Lock). Fungerar bara med appen öppen.
 - Kö: nya besök läggs i `patrol.queue` (sparas i `localStorage`, `viltrapport-patrol-queue`) och skickas i omgångar (`flushPatrolQueue`), även efter nätavbrott.
-- Manuellt: "✋ Markera själv" – kartklick markerar rutan (`patrolMapClick()` anropas först i kartans klick). Tryck igen på egen nyss markerad ruta = ångra.
+- Manuellt: "✋ Markera själv" – klick på ronderingskartan markerar rutan (`patrolMapClick()`). Tryck igen på egen nyss markerad ruta = ångra.
 - Statistik: kortet `#stats-patrol` (andel grönt/orange/rött, rutor per person och GPS/manuellt, 30 dagar). Excel: fliken "Rondering".
 - `fetchAll()` i app.js hämtar sida för sida (Supabase ger max 1000 rader per anrop) – används för rapporter och rondering.
 

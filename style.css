@@ -163,11 +163,12 @@ input:focus, select:focus, textarea:focus {
 }
 .hero {
   position: relative;
-  height: 440px;
   flex: none;
-  background: linear-gradient(180deg, #1b2040 0%, #4a3558 40%, #b8603f 78%, #e39a5a 100%);
+  /* Bilden är kvadratisk. Lite mörk yta under så att kortet inte täcker skylten. */
+  padding-bottom: 30px;
+  background: #101218;
 }
-.hero-img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hero-img { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; }
 .hero-scrim {
   position: absolute;
   inset: 0;
@@ -326,13 +327,11 @@ input:focus, select:focus, textarea:focus {
 .brand { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
 .brand-logo {
   flex: none;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  overflow: hidden;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.12);
+  display: block;
+  width: auto;
+  height: 42px;
+  border-radius: 6px;
 }
-.brand-logo svg { display: block; width: 100%; height: 100%; }
 .brand-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.05; }
 .brand-kicker {
   font: 700 11px/1.2 "Source Sans 3", sans-serif;
@@ -1190,3 +1189,14 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
 .patrol-manual .leaflet-container, .leaflet-container.patrol-manual { cursor: cell; }
 #stats-patrol { margin-top: 12px; }
 .patrol-kpis { grid-template-columns: repeat(3, 1fr); }
+#patrol-map { position: absolute; inset: 0; }
+.patrol-open.on { background: var(--green); color: var(--white); }
+.tab { min-width: 0; }
+
+/* Syns inte, men läses av skärmläsare */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}

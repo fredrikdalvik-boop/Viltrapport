@@ -6,6 +6,8 @@
 // Med GPS blir rutorna inom radien kring dig gröna. Man kan också trycka på rutor själv.
 // Bara rutans mittpunkt, vem och när sparas (tabellen patrol_visits) – inte GPS-spåret.
 //
+// Ronderingen har en egen flik med en egen karta (patrolMap). På den vanliga kartan kan
+// rutnätet visas eller döljas med knappen "🚶 Rutnät".
 // Filen laddas före app.js och använder app.js variabler (map, db, $ …) först när den körs.
 
 const PATROL = {
@@ -25,10 +27,13 @@ let patrolVisits = [];        // { id, user_id, lat, lng, method, visited_at }
 let patrolLast = new Map();   // ruta → senaste besöket
 let patrolBorder = null;      // yttergränsen från GPX-filen: [[lat, lng], …]
 let patrolCells = null;       // rutorna som ingår (inom yttergränsen), { keys: Set, list: [[i, j]] }
-let patrolLayer = null;
+let patrolLayer = null;       // rutnätet på den vanliga kartan
+let patrolMap = null;         // ronderingsflikens karta
+let patrolMapLayer = null;    // rutnätet på ronderingsflikens karta
+let patrolBorderLine = null;  // yttergränsen ritad på ronderingskartan
 
 const patrol = {
-  open: false,       // är ronderingspanelen öppen?
+  open: false,       // visas ronderingsfliken?
   gps: false,        // är GPS-ronderingen igång?
   manual: false,     // trycker man på rutor själv?
   watchId: null,
@@ -129,12 +134,20 @@ function ensurePatrolCells() {
 }
 
 // Anropas från loadAreas() när GPX-filens yttergräns lästs in
+// Ändras gränsen (t.ex. en större yttergräns i GPX-filen) räknas rutorna om – nya rutor fylls i automatiskt.
 function setPatrolBorder(points) {
   patrolBorder = points;
   patrolCells = null;
   rebuildPatrolLast();
-  patrolLayer?.redraw();
+  drawPatrolBorder();
+  redrawPatrol();
   renderPatrolBar();
+}
+
+function drawPatrolBorder() {
+  if (!patrolMap || !patrolBorder) return;
+  patrolBorderLine?.remove();
+  patrolBorderLine = L.polygon(patrolBorder, { color: '#ffd60a', weight: 3, fillOpacity: 0, interactive: false }).addTo(patrolMap);
 }
 
 // ---------- Färger ----------
@@ -173,23 +186,29 @@ function rebuildPatrolLast() {
 // ---------- Kartlagret ----------
 // Ett canvaslager som ritar rutorna bit för bit (snabbt även med tusentals rutor).
 
-function createPatrolLayer() {
-  map.createPane('patrolPane').style.zIndex = 350;   // över kartbilden, under områden och nålar
-  const Grid = L.GridLayer.extend({
-    createTile(coords) {
-      const tile = document.createElement('canvas');
-      const size = this.getTileSize();
-      tile.width = size.x;
-      tile.height = size.y;
-      drawPatrolTile(tile.getContext('2d'), coords, size);
-      return tile;
-    },
-  });
-  patrolLayer = new Grid({ pane: 'patrolPane', opacity: 0.38, minZoom: PATROL.MIN_ZOOM, updateWhenZooming: false });
-  return patrolLayer;
+const PatrolGrid = L.GridLayer.extend({
+  createTile(coords) {
+    const tile = document.createElement('canvas');
+    const size = this.getTileSize();
+    tile.width = size.x;
+    tile.height = size.y;
+    drawPatrolTile(this._map, tile.getContext('2d'), coords, size);
+    return tile;
+  },
+});
+
+// Ett rutnätslager för en karta (den vanliga eller ronderingskartan)
+function createPatrolLayer(targetMap, opacity = 0.38) {
+  targetMap.createPane('patrolPane').style.zIndex = 350;   // över kartbilden, under områden och nålar
+  return new PatrolGrid({ pane: 'patrolPane', opacity, minZoom: PATROL.MIN_ZOOM, updateWhenZooming: false });
 }
 
-function drawPatrolTile(ctx, coords, size) {
+function redrawPatrol() {
+  patrolLayer?.redraw();
+  patrolMapLayer?.redraw();
+}
+
+function drawPatrolTile(map, ctx, coords, size) {
   const { list, keys } = ensurePatrolCells();
   if (!list.length) return;
   const z = coords.z;
@@ -221,7 +240,7 @@ function schedulePatrolRedraw() {
   if (patrol.redrawTimer) return;
   patrol.redrawTimer = setTimeout(() => {
     patrol.redrawTimer = null;
-    patrolLayer?.redraw();
+    redrawPatrol();
     renderPatrolBar();
   }, 1500);
 }
@@ -242,7 +261,7 @@ function setPatrolData(visits, configRow) {
   const pending = patrol.queue.map((v) => ({ ...v, id: null, user_id: currentUser?.id }));
   patrolVisits = [...(visits ?? patrolVisits.filter((v) => !v.tmp)), ...pending];
   rebuildPatrolLast();
-  patrolLayer?.redraw();
+  redrawPatrol();
   renderPatrolBar();
 }
 
@@ -331,16 +350,20 @@ function onPatrolPosition(p) {
   const first = !patrol.pos;
   patrol.pos = { lat, lng, accuracy };
   $('patrol-warning').hidden = true;
-  if (!patrol.marker) {
-    patrol.circle = L.circle([lat, lng], { radius: patrolRadius, color: '#1565c0', weight: 2, fillOpacity: 0.08, interactive: false }).addTo(map);
-    patrol.marker = L.circleMarker([lat, lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#1565c0', fillOpacity: 1, interactive: false }).addTo(map);
-  } else {
-    patrol.marker.setLatLng([lat, lng]);
-    patrol.circle.setLatLng([lat, lng]).setRadius(patrolRadius);
+  if (patrolMap) {
+    if (!patrol.marker) {
+      patrol.circle = L.circle([lat, lng], { radius: patrolRadius, color: '#1565c0', weight: 2, fillOpacity: 0.08, interactive: false }).addTo(patrolMap);
+      patrol.marker = L.circleMarker([lat, lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#1565c0', fillOpacity: 1, interactive: false }).addTo(patrolMap);
+    } else {
+      patrol.marker.setLatLng([lat, lng]);
+      patrol.circle.setLatLng([lat, lng]).setRadius(patrolRadius);
+    }
+    // Följ med på kartan: centrera första gången och när man närmar sig kanten
+    if (patrol.open) {
+      if (first) patrolMap.setView([lat, lng], Math.max(patrolMap.getZoom(), 16));
+      else if (!patrolMap.getBounds().pad(-0.2).contains([lat, lng])) patrolMap.panTo([lat, lng]);
+    }
   }
-  // Följ med på kartan: centrera första gången och när man närmar sig kanten
-  if (first) map.setView([lat, lng], Math.max(map.getZoom(), 16));
-  else if (!map.getBounds().pad(-0.2).contains([lat, lng])) map.panTo([lat, lng]);
 
   if (accuracy <= PATROL.MAX_ACCURACY) {
     let changed = false;
@@ -396,7 +419,7 @@ function stopPatrolGps() {
   patrol.marker = null;
   patrol.circle = null;
   flushPatrolQueue();
-  patrolLayer?.redraw();
+  redrawPatrol();
   renderPatrolBar();
 }
 
@@ -408,9 +431,12 @@ window.addEventListener('online', () => flushPatrolQueue());
 
 // ---------- Markera rutor själv ----------
 
-// Anropas från kartans klick. true = klicket hanterades här.
+// Tryck på ronderingskartan. Markerar bara när "✋ Markera själv" är på.
 function patrolMapClick(latlng) {
-  if (!patrol.open || !patrol.manual) return false;
+  if (!patrol.manual) {
+    showToast('Tryck på ✋ Markera själv först för att markera rutor');
+    return false;
+  }
   const [i, j] = cellAt(latlng.lat, latlng.lng);
   const key = cellKey(i, j);
   if (!ensurePatrolCells().keys.has(key)) {
@@ -423,7 +449,7 @@ function patrolMapClick(latlng) {
     return true;
   }
   if (markCell(i, j, 'manual')) {
-    patrolLayer.redraw();
+    redrawPatrol();
     renderPatrolBar();
   } else {
     showToast('Du har redan ronderat rutan de senaste 2 timmarna');
@@ -445,7 +471,7 @@ async function undoManualCell(key) {
     && (v.id === id || v.id === null)));
   patrol.sessionCells = Math.max(0, patrol.sessionCells - 1);
   rebuildPatrolLast();
-  patrolLayer.redraw();
+  redrawPatrol();
   renderPatrolBar();
   showToast('Rutan är inte längre markerad');
 }
@@ -462,32 +488,62 @@ function patrolCoverage() {
   return { ...count, total: list.length };
 }
 
-function openPatrol() {
-  closeSheet();
-  closeFilter();
-  closeRisk();
-  closeSettings();
-  patrol.open = true;
-  if (patrolLayer && !map.hasLayer(patrolLayer)) patrolLayer.addTo(map);
-  $('patrol-bar').hidden = false;
-  $('patrol-open').hidden = true;
-  $('map-hint').hidden = true;
-  renderPatrolBar();
-  map.invalidateSize();
+// Ronderingsflikens karta skapas första gången fliken visas (Leaflet behöver synlig storlek)
+function initPatrolMap() {
+  if (patrolMap) {
+    patrolMap.invalidateSize();
+    return;
+  }
+  patrolMap = L.map('patrol-map').setView(map ? map.getCenter() : CONFIG.MAP_CENTER, Math.max(map?.getZoom() ?? 0, 14));
+  const streets = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, className: 'tiles-streets',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-bidragsgivare',
+  });
+  const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, attribution: 'Bild &copy; Esri &mdash; Källa: Esri, Maxar, Earthstar Geographics och GIS User Community',
+  });
+  (layerPrefs.patrolBase === 'Satellit' ? satellite : streets).addTo(patrolMap);
+  L.control.layers({ 'Karta': streets, 'Satellit': satellite }, null, { collapsed: true }).addTo(patrolMap);
+  patrolMap.on('baselayerchange', (e) => saveLayerPrefs({ patrolBase: e.name }));
+  patrolMapLayer = createPatrolLayer(patrolMap, 0.42).addTo(patrolMap);
+  drawPatrolBorder();
+  patrolMap.on('click', (e) => patrolMapClick(e.latlng));
 }
 
-function closePatrol() {
+// Anropas från switchTab()
+function onPatrolTab(visible) {
+  patrol.open = visible;
+  if (!visible) return;
+  initPatrolMap();
+  // Startar man fliken med GPS igång: visa var man är
+  if (patrol.pos && !patrol.marker) onPatrolPosition({ coords: { latitude: patrol.pos.lat, longitude: patrol.pos.lng, accuracy: patrol.pos.accuracy } });
+  else if (patrol.pos) patrolMap.setView([patrol.pos.lat, patrol.pos.lng]);
+  renderPatrolBar();
+}
+
+// Vid utloggning
+function stopPatrol() {
   if (patrol.gps) stopPatrolGps();
-  patrol.open = false;
   patrol.manual = false;
-  $('patrol-bar').hidden = true;
-  $('patrol-open').hidden = false;
-  $('map-hint').hidden = false;
-  map.getContainer().classList.remove('patrol-manual');
+}
+
+// Rutnätet på den vanliga kartan: knappen "🚶 Rutnät" (och lagerknappen)
+function setMainPatrolGrid(on) {
+  if (!patrolLayer || !map) return;
+  if (on && !map.hasLayer(patrolLayer)) patrolLayer.addTo(map);
+  if (!on && map.hasLayer(patrolLayer)) patrolLayer.remove();
+  saveLayerPrefs({ patrol: on });
+  syncPatrolToggle();
+}
+function syncPatrolToggle() {
+  const on = Boolean(patrolLayer && map?.hasLayer(patrolLayer));
+  $('patrol-toggle').textContent = on ? '🚶 Rutnät: på' : '🚶 Rutnät: av';
+  $('patrol-toggle').setAttribute('aria-pressed', String(on));
+  $('patrol-toggle').classList.toggle('on', on);
 }
 
 function renderPatrolBar() {
-  if (!$('patrol-bar') || $('patrol-bar').hidden) return;
+  if (!$('patrol-view') || $('patrol-view').hidden) return;
   const c = patrolCoverage();
   const pct = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
   const x = patrolCfg.greenDays;
@@ -497,7 +553,7 @@ function renderPatrolBar() {
   $('patrol-gps').classList.toggle('btn-secondary', patrol.gps);
   $('patrol-manual').classList.toggle('selected', patrol.manual);
   $('patrol-manual').textContent = patrol.manual ? '✋ Klar' : '✋ Markera själv';
-  map.getContainer().classList.toggle('patrol-manual', patrol.manual);
+  patrolMap?.getContainer().classList.toggle('patrol-manual', patrol.manual);
   $('patrol-center').hidden = !patrol.pos;
 
   let status;
@@ -546,14 +602,13 @@ async function savePatrolConfig() {
   }
   applyPatrolConfig(config);
   rebuildPatrolLast();
-  patrolLayer?.redraw();
+  redrawPatrol();
   renderPatrolBar();
   showToast('Ronderingsinställningarna är sparade');
 }
 
 function initPatrolUI() {
-  $('patrol-open').addEventListener('click', openPatrol);
-  $('patrol-close').addEventListener('click', closePatrol);
+  $('patrol-toggle').addEventListener('click', () => setMainPatrolGrid(!(patrolLayer && map?.hasLayer(patrolLayer))));
   $('patrol-gps').addEventListener('click', () => (patrol.gps ? stopPatrolGps() : startPatrolGps()));
   $('patrol-manual').addEventListener('click', () => {
     patrol.manual = !patrol.manual;
@@ -561,7 +616,7 @@ function initPatrolUI() {
     renderPatrolBar();
   });
   $('patrol-center').addEventListener('click', () => {
-    if (patrol.pos) map.setView([patrol.pos.lat, patrol.pos.lng], Math.max(map.getZoom(), 16));
+    if (patrol.pos) patrolMap?.setView([patrol.pos.lat, patrol.pos.lng], Math.max(patrolMap.getZoom(), 16));
   });
   $('patrol-radius').addEventListener('click', (e) => {
     const b = e.target.closest('[data-radius]');
