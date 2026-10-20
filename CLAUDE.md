@@ -159,6 +159,17 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
 - **Stående önskemål från användaren:** när vi bygger nya funktioner, lägg också till nya bra filter och grupperingar
   i statistiken (`STAT_DIMS`/`STAT_CARDS`, och vid behov i filtret). Föreslå dem gärna.
 
+## Planerade funktioner (pausade)
+### Egna områden med etikett + import från Excel (önskemål från Charlie, pausad 2026-10)
+- Admin ritar områden (polygon) och sätter en etikett, t.ex. "Airside bana 1". Återanvänd ritverktyget (`startDraw()`).
+- Etiketten räknas ut live med punkt-i-polygon (som riskzonerna), så även gamla rapporter får rätt etikett.
+  En rapport kan ligga i flera områden (t.ex. "Airside" och "Bana 1") och får då alla etiketter.
+- Visas i ruta/lista, filter per område, eget statistikkort, kolumn i Excel-exporten.
+- Import av gamla loggar från Excel (bara admin): förhandsgranskning ("120 rader, 8 fel") innan något sparas,
+  märks som importerade, skydd mot dubbelimport, får områdesetikett och väder i efterhand.
+- **Öppna frågor:** hur ser Charlies Excelfil ut (be om 5–10 exempelrader)? Finns koordinater, och i vilket format
+  (WGS84 eller SWEREF 99 TM – räkna om i så fall)? Om bara platsnamn: koppla namn → område.
+
 ## Inloggning
 - Konton skapas i appen med inbjudningskod. Admin kan också skapa användare i Supabase
   (Authentication → Users → Add user). De får då ange koden vid första inloggningen.
