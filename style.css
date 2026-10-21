@@ -1409,3 +1409,28 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
   background-size: 0 100%;
 }
 .pocket-exit.holding { background-size: 100% 100%; transition: background-size 1s linear; color: #bbb; }
+
+/* Fråga (dialog) mitt på skärmen */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0,0,0,0.45);
+}
+.dialog {
+  width: 100%;
+  max-width: 400px;
+  padding: 18px 18px 14px;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+.dialog h2 { margin: 0 0 8px; font-size: 19px; }
+.dialog p { margin: 0 0 14px; line-height: 1.45; }
+.dialog-buttons { display: flex; gap: 10px; }
+.dialog-buttons .btn { flex: 1; margin-top: 0; }

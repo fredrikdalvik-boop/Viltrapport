@@ -179,7 +179,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   utan gräns ±4 km kring mitten). Rutorna räknas i meter från `CONFIG.MAP_CENTER` (`cellAt`, `cellBounds`, nyckel `"i:j"`).
 - Ritas av ett eget canvaslager (`PatrolGrid`, `L.GridLayer`, pane `patrolPane` z 350, från zoom 11). Även "🚶 Ronderingsrutor" i vanliga kartans lagerknapp.
 - Färg efter senaste besök: grön i `greenDays` dagar (1–30, standard 7), sedan gradvis orange under lika lång tid, röd efter 2 × greenDays eller aldrig (`patrolColor`).
-- Tabell `patrol_visits (id, user_id, lat, lng, method gps|manual, visited_at)`: bara rutans mittpunkt sparas, inte GPS-spåret.
+- Tabell `patrol_visits (id, user_id, lat, lng, method gps|manual|filled, visited_at)`: bara rutans mittpunkt sparas, inte GPS-spåret.
   Trigger `patrol_visits_stamp` sätter `user_id = auth.uid()` och begränsar tiden (max 30 dagar bakåt, aldrig framtid). Medlemmar läser/skapar, egna eller admin tar bort.
   `patrol_config (id = 1, config {grid, greenDays})`: medlemmar läser, admin uppdaterar. Appen hämtar besök 62 dagar bakåt (`PATROL.LOAD_DAYS`).
 - GPS: `watchPosition` (hög noggrannhet), sämre än ±100 m markerar inget. Rutor som nuddar radien (25/50/100/200 m, sparas per person i `localStorage`) blir gröna.
@@ -196,7 +196,11 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   (blått #0072b2 = ronderat, orange #e69f00 → vinrött #882255). Kontrollerade med dataviz-validatorn (CVD ΔE ≥ 14). Namnen (`names`) används i förklaring och statistik.
   Använd alltid `patrolPalette()`/`patrolColor()`/`patrolOldColor()` – inga hårdkodade ronderingsfärger.
 - **GPS med släckt skärm går inte i en webbapp** (webbläsaren stoppar platsen). Lösningar i appen: Wake Lock + **🌙 Fickläge** (`#pocket`, svart skärm,
-  GPS fortsätter, håll in knappen 1 s för att avsluta). Släcks skärmen ändå visas ett meddelande om glappet när man kommer tillbaka (`patrolHiddenAt`).
+  GPS fortsätter, håll in knappen 1 s för att avsluta).
+- **Fylla i glapp:** senaste säkra positionen sparas (`patrol.lastFix`, även i `localStorage` `viltrapport-patrol-lastfix` om appen startas om).
+  Kommer nästa position mer än 30 s senare och minst max(150 m, 2 × radien) bort (högst 20 km, högst 3 h) visas dialogen `#gap-dialog`
+  ("Du verkar ha flyttat dig … utan GPS-signal"). Ja → `fillGap()` markerar rutorna längs en rak linje med tider jämnt fördelade, `method = 'filled'`.
+  Saknar databasen 'filled' (SQL ej körd, felkod 23514) sparas de som 'manual' i stället.
   Riktig bakgrunds-GPS kräver en inbyggd app (t.ex. Capacitor + bakgrundsplats-plugin).
 - Statistik: kortet `#stats-patrol` (andel grönt/orange/rött, rutor per person och GPS/manuellt, 30 dagar). Excel: fliken "Rondering".
 - `fetchAll()` i app.js hämtar sida för sida (Supabase ger max 1000 rader per anrop) – används för rapporter och rondering.

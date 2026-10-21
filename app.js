@@ -2180,7 +2180,8 @@ function renderPatrolStats() {
     <h4 class="risk-section">Ronderade rutor per person, 30 dagar</h4>
     ${st.byUser.map(([id, v]) => bar(nameFor(id), v, maxUser, total)).join('') || '<p class="hint">Ingen rondering de senaste 30 dagarna.</p>'}
     ${total ? `<h4 class="risk-section">Hur rutorna ronderades</h4>
-      ${bar('📡 GPS', st.byMethod.gps, total, total)}${bar('✋ Manuellt', st.byMethod.manual, total, total)}` : ''}`;
+      ${bar('📡 GPS', st.byMethod.gps, total, total)}${bar('✋ Manuellt', st.byMethod.manual, total, total)}${
+        st.byMethod.filled ? bar('📏 Ifyllt (rak linje)', st.byMethod.filled, total, total) : ''}` : ''}`;
 }
 
 // Jämförelsetabell: rader × kolumner, färgstyrka efter antal
@@ -2862,7 +2863,7 @@ async function exportExcel(onlyFiltered) {
   const patrolRows = [...patrolVisits].sort((a, b) => new Date(b.visited_at) - new Date(a.visited_at)).map((v) => ({
     'Tid': xlDate(v.visited_at),
     'Person': nameFor(v.user_id),
-    'Sätt': v.method === 'manual' ? 'Manuellt' : 'GPS',
+    'Sätt': { manual: 'Manuellt', filled: 'Ifyllt (rak linje)' }[v.method] ?? 'GPS',
     'Rutans mitt, lat': v.lat,
     'Rutans mitt, lng': v.lng,
     'Rutstorlek (m)': patrolCfg.grid,

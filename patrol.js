@@ -312,6 +312,11 @@ async function flushPatrolQueue() {
     .insert(batch.map(({ tmp, ...v }) => v))
     .select('id, user_id, lat, lng, method, visited_at');
   patrol.flushing = false;
+  if (error?.code === '23514' && patrol.queue.some((v) => v.method === 'filled')) {
+    patrol.queue.forEach((v) => { if (v.method === 'filled') v.method = 'manual'; });
+    savePatrolQueue();
+    return flushPatrolQueue();
+  }
   if (error) {
     console.warn('Rondering sparades inte än:', error.message);
     patrol.flushFailed = true;
@@ -343,11 +348,12 @@ function visitedByMeRecently(key) {
 }
 
 // Markera en ruta som ronderad (läggs i kön och syns direkt)
-function markCell(i, j, method) {
+// method: gps, manual eller filled (ifylld sträcka). at = tid (standard nu).
+function markCell(i, j, method, at = new Date()) {
   const key = cellKey(i, j);
   if (!ensurePatrolCells().keys.has(key) || visitedByMeRecently(key)) return false;
   const [lat, lng] = cellCenter(i, j);
-  const visit = { tmp: `${Date.now()}-${Math.random()}`, lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)), method, visited_at: new Date().toISOString() };
+  const visit = { tmp: `${Date.now()}-${Math.random()}`, lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)), method, visited_at: at.toISOString() };
   patrol.queue.push(visit);
   savePatrolQueue();
   const local = { ...visit, id: null, user_id: currentUser?.id };
@@ -396,6 +402,10 @@ function onPatrolPosition(p) {
   }
 
   if (accuracy <= PATROL.MAX_ACCURACY) {
+    // Glapp i GPS:en (släckt skärm, appen omstartad …)? Jämför med senaste säkra positionen.
+    const now = Date.now();
+    if (patrol.lastFix && now - patrol.lastFix.t > GAP_MIN_SECONDS * 1000) offerGapFill(patrol.lastFix, { lat, lng, t: now });
+    saveLastFix({ lat, lng, t: now });
     let changed = false;
     for (const [i, j] of cellsWithin(lat, lng, patrolRadius)) changed = markCell(i, j, 'gps') || changed;
     if (changed) schedulePatrolRedraw();
@@ -430,6 +440,9 @@ function startPatrolGps() {
   }
   patrol.gps = true;
   patrol.sessionCells = 0;
+  // Startades appen om mitt i en rondering? Jämför första positionen med den sparade.
+  const saved = loadLastFix();
+  patrol.lastFix = saved && Date.now() - saved.t < GAP_MAX_HOURS * 3600000 ? saved : null;
   $('patrol-warning').hidden = true;
   patrol.watchId = navigator.geolocation.watchPosition(onPatrolPosition, onPatrolError,
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
@@ -442,6 +455,7 @@ function stopPatrolGps() {
   patrol.watchId = null;
   patrol.gps = false;
   patrol.pos = null;
+  clearLastFix();
   patrol.wakeLock?.release().catch(() => {});
   patrol.wakeLock = null;
   patrol.marker?.remove();
@@ -464,13 +478,69 @@ document.addEventListener('visibilitychange', () => {
   }
   if (!patrol.gps) return;
   keepScreenOn();
-  const gone = patrolHiddenAt ? (Date.now() - patrolHiddenAt) / 1000 : 0;
   patrolHiddenAt = null;
-  if (gone > 20) {
-    const min = Math.round(gone / 60);
-    showToast(`GPS:en var pausad ${min < 1 ? 'en kort stund' : `i ${min} min`} när skärmen var släckt. Använd 🌙 Fickläge nästa gång.`);
-  }
+  // Själva glappet upptäcks i onPatrolPosition: nästa position jämförs med den förra
 });
+
+// ---------- Fylla i sträckan när GPS:en varit pausad ----------
+// Webbläsaren stoppar GPS:en när skärmen släcks. Har man förflyttat sig under tiden
+// kan rutorna längs en rak linje mellan punkterna fyllas i (method 'filled').
+
+const PATROL_LASTFIX_KEY = 'viltrapport-patrol-lastfix';
+const GAP_MIN_SECONDS = 30;      // så här länge utan GPS-position räknas som ett glapp
+const GAP_MIN_METERS = 150;      // kortare förflyttning än så frågar vi inte om
+const GAP_MAX_METERS = 20000;    // längre än så är troligen fel
+const GAP_MAX_HOURS = 3;         // äldre position än så används inte
+
+function saveLastFix(fix) {
+  patrol.lastFix = fix;
+  try { localStorage.setItem(PATROL_LASTFIX_KEY, JSON.stringify(fix)); } catch { /* privat läge */ }
+}
+function loadLastFix() {
+  try { return JSON.parse(localStorage.getItem(PATROL_LASTFIX_KEY) || 'null'); } catch { return null; }
+}
+function clearLastFix() {
+  patrol.lastFix = null;
+  try { localStorage.removeItem(PATROL_LASTFIX_KEY); } catch { /* privat läge */ }
+}
+
+function metersBetween(a, b) {
+  const [ax, ay] = toMeters(a.lat, a.lng);
+  const [bx, by] = toMeters(b.lat, b.lng);
+  return Math.hypot(bx - ax, by - ay);
+}
+
+function offerGapFill(from, to) {
+  const dist = metersBetween(from, to);
+  const hours = (to.t - from.t) / 3600000;
+  if (dist < Math.max(GAP_MIN_METERS, patrolRadius * 2) || dist > GAP_MAX_METERS || hours > GAP_MAX_HOURS || hours <= 0) return;
+  const min = Math.max(1, Math.round((to.t - from.t) / 60000));
+  const distText = dist >= 1000 ? `${(dist / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(dist / 10) * 10} m`;
+  $('gap-text').textContent = `Du verkar ha flyttat dig ${distText} på ${min} min utan GPS-signal. ` +
+    'Vill du fylla i sträckan mellan punkterna? Rutorna längs en rak linje blir gröna och märks som ifyllda.';
+  $('gap-dialog').hidden = false;
+  $('gap-yes').onclick = () => { $('gap-dialog').hidden = true; fillGap(from, to); };
+  $('gap-no').onclick = () => { $('gap-dialog').hidden = true; };
+}
+
+// Rutor längs en rak linje mellan två punkter, med tider jämnt fördelade över glappet
+function fillGap(from, to) {
+  const [ax, ay] = toMeters(from.lat, from.lng);
+  const [bx, by] = toMeters(to.lat, to.lng);
+  const dist = Math.hypot(bx - ax, by - ay);
+  const step = Math.max(5, patrolCfg.grid / 3);
+  const steps = Math.max(1, Math.ceil(dist / step));
+  let count = 0;
+  for (let k = 0; k <= steps; k++) {
+    const f = k / steps;
+    const [lat, lng] = toLatLng(ax + (bx - ax) * f, ay + (by - ay) * f);
+    const at = new Date(from.t + (to.t - from.t) * f);
+    for (const [i, j] of cellsWithin(lat, lng, patrolRadius)) if (markCell(i, j, 'filled', at)) count++;
+  }
+  redrawPatrol();
+  renderPatrolBar();
+  showToast(count ? `${count} ${count === 1 ? 'ruta' : 'rutor'} ifyllda längs sträckan` : 'Inga nya rutor att fylla i');
+}
 
 // ---------- Fickläge ----------
 // Svart skärm som drar lite ström. Skärmen är tekniskt på, så GPS:en fortsätter.
@@ -833,7 +903,7 @@ function patrolStats(days = 30) {
   const since = Date.now() - days * 86400000;
   const recent = patrolVisits.filter((v) => new Date(v.visited_at).getTime() >= since);
   const byUser = new Map();
-  const byMethod = { gps: 0, manual: 0 };
+  const byMethod = { gps: 0, manual: 0, filled: 0 };
   for (const v of recent) {
     byUser.set(v.user_id, (byUser.get(v.user_id) ?? 0) + 1);
     byMethod[v.method] = (byMethod[v.method] ?? 0) + 1;

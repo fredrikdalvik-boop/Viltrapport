@@ -519,6 +519,10 @@ create table if not exists public.patrol_visits (
   visited_at timestamptz not null default now()
 );
 create index if not exists patrol_visits_visited_at_idx on public.patrol_visits (visited_at desc);
+-- gps = GPS, manual = markerad för hand, filled = ifylld sträcka när GPS:en varit pausad
+alter table public.patrol_visits drop constraint if exists patrol_visits_method_check;
+alter table public.patrol_visits add constraint patrol_visits_method_check
+  check (method in ('gps', 'manual', 'filled'));
 
 -- Ronderingsinställningar (rutstorlek, hur länge en ruta är grön). En rad, id = 1.
 create table if not exists public.patrol_config (
