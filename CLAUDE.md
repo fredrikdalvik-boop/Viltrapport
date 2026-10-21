@@ -61,7 +61,7 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   Inga +/−-knappar på pekskärm (`IS_TOUCH`). Kartknappar i en kolumn nere till höger (`MapTools`): 📍 Min plats (`#locate-btn`, ruta med "Rapportera här"),
   🚶 Rutnät (`#patrol-toggle`) och lagerknappen. Hjälptexten tonas bort efter 5 s eller när kartan flyttas (`showMapHint()`/`fadeMapHint()`, inte i ritläget).
   Listkort: hela kortet öppnar detaljerna, knapparna är ikoner (`.btn-icon`, text i `.btn-label` visas bara på dator) på samma rad som riskmärket (`.card-foot`).
-  Ronderingspanelen kan fällas ihop (`#patrol-collapse`, sparas i `viltrapport-patrol-collapsed`): då syns bara status och GPS-knappen.
+  Ronderingens meny är stängd som standard: bara ikoner (☰, 📡 GPS, ✋/➕, 🌙).
 - **Dator (≥ 800px):** knappar med text (`.tool-label`, `.btn-label`), +/− finns, kartknappar uppe till höger, ronderingspanelen 220px.
 - Paneler (`.sheet`): tät layout, rubriken (`h2`) och knappraden (`.sheet-buttons`) är `position: sticky` så att Avbryt/Spara alltid syns.
 
@@ -169,8 +169,12 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   i statistiken (`STAT_DIMS`/`STAT_CARDS`, och vid behov i filtret). Föreslå dem gärna.
 
 ## Rondering (`patrol.js`)
-- Egen flik "🚶 Rondering" (`#patrol-view`) med egen karta `patrolMap` (skapas första gången fliken visas, `initPatrolMap()`) och panelen `#patrol-bar`
-  som smal kolumn till höger (142px, `.wide` = 320px när "Mer" är öppet). Lagerknapp och upphovstext ligger till vänster. `followMe()` håller positionen synlig bredvid panelen.
+- Egen flik "🚶 Rondering" (`#patrol-view`) med egen karta `patrolMap` (skapas första gången fliken visas, `initPatrolMap()`).
+  **Menyn är stängd som standard**: bara runda ikoner uppe till höger (`#patrol-fab`): ☰ öppnar menyn (`setPatrolMenu()`), 📡 GPS (`#patrol-gps-fab`:
+  grå = av, grön med puls = igång, gul = svag signal, siffra = nya rutor), lägesikon ✋/➕ (`#patrol-mode-fab`, tryck = avsluta läget) och 🌙 Fickläge när GPS:en är igång.
+  Kort text högst upp i lägena (`#patrol-hint`). `renderPatrolFab()` uppdaterar ikonerna (anropas från `renderPatrolBar()`).
+  Öppen meny = panelen `#patrol-bar` (smal kolumn till höger, 142px, `.wide` = 320px när "Mer" är öppet, ✕ stänger). "Markera rutor" och "Ny observation" stänger menyn.
+  Lagerknapp och upphovstext ligger till vänster. `followMe()` håller positionen synlig till vänster om menyn/ikonerna.
   `switchTab()` anropar `onPatrolTab()` och döljer filterraden i fliken. GPS fortsätter när man byter flik.
 - På vanliga kartan visar/döljer knappen `#patrol-toggle` ("🚶 Rutnät: av/på") rutnätet (`setMainPatrolGrid()`, av som standard, `layerPrefs.patrol`).
   Två lager: `patrolLayer` (vanliga kartan) och `patrolMapLayer` – rita om båda med `redrawPatrol()`.
@@ -191,7 +195,6 @@ allas rapporter. Man kan redigera och ta bort bara sina egna.
   ronderingskartan och öppnar vanliga formuläret (samma position läggs i `draftMarker` på vanliga kartan). `removeDraftMarker()` tar bort båda.
 - Observationer på ronderingskartan: "Dölj/Visa" (`#patrol-obs`, `setPatrolObs()`, `layerPrefs.patrolObs`). Lagret `patrolObsLayer` fylls av
   `renderMarkers()` → `fillMarkers(layer, list)` och följer filtret. Filterknapp/filterrad syns i fliken bara när observationerna visas (`updatePatrolFilterUI()`).
-- Hopfälld panel: status, GPS, Markera rutor, Ny observation och Fickläge syns (resten döljs).
 - **🧬 Kromosom-läge** (`#patrol-cvd`, `setPatrolCvd()`, `localStorage` `viltrapport-patrol-cvd`): färgblindvänliga färger i `PATROL_PALETTES.cvd`
   (blått #0072b2 = ronderat, orange #e69f00 → vinrött #882255). Kontrollerade med dataviz-validatorn (CVD ΔE ≥ 14). Namnen (`names`) används i förklaring och statistik.
   Använd alltid `patrolPalette()`/`patrolColor()`/`patrolOldColor()` – inga hårdkodade ronderingsfärger.

@@ -54,7 +54,7 @@ const patrol = {
 
 const PATROL_RADIUS_KEY = 'viltrapport-patrol-radius';
 const PATROL_QUEUE_KEY = 'viltrapport-patrol-queue';
-const PATROL_COLLAPSED_KEY = 'viltrapport-patrol-collapsed';
+
 let patrolRadius = (() => {
   try { return Number(localStorage.getItem(PATROL_RADIUS_KEY)) || 50; } catch { return 50; }
 })();
@@ -690,7 +690,8 @@ function patrolCoverage() {
 
 // Håll positionen synlig i den del av kartan som inte täcks av panelen
 function followMe(latlng) {
-  const panel = $('patrol-bar').offsetWidth || 0;
+  // Menyn eller ikonerna ligger till höger – håll positionen till vänster om dem
+  const panel = $('patrol-bar').hidden ? 64 : $('patrol-bar').offsetWidth;
   patrolMap.panInside(latlng, { paddingTopLeft: [50, 60], paddingBottomRight: [panel + 50, 60] });
 }
 
@@ -756,7 +757,44 @@ function syncPatrolToggle() {
   $('patrol-toggle').classList.toggle('on', on);
 }
 
+function setPatrolMenu(open) {
+  $('patrol-bar').hidden = !open;
+  $('patrol-fab').hidden = open;
+  $('patrol-menu').setAttribute('aria-expanded', String(open));
+  renderPatrolBar();
+}
+
+// Ikonerna när menyn är stängd + kort text högst upp när man är i ett läge
+function renderPatrolFab() {
+  const fab = $('patrol-gps-fab');
+  const weak = patrol.gps && (!patrol.pos || patrol.pos.accuracy > PATROL.MAX_ACCURACY);
+  fab.classList.toggle('on', patrol.gps && !weak);
+  fab.classList.toggle('weak', weak);
+  fab.setAttribute('aria-pressed', String(patrol.gps));
+  const label = !patrol.gps ? 'Starta GPS' : weak ? 'GPS igång – svag signal. Tryck för att stoppa' : 'GPS igång. Tryck för att stoppa';
+  fab.title = label;
+  fab.setAttribute('aria-label', label);
+  $('patrol-gps-count').hidden = !patrol.gps || !patrol.sessionCells;
+  $('patrol-gps-count').textContent = patrol.sessionCells;
+
+  $('patrol-pocket-fab').hidden = !patrol.gps;
+  const mode = patrol.reporting ? 'report' : patrol.manual ? 'manual' : '';
+  $('patrol-mode-fab').hidden = !mode;
+  $('patrol-mode-fab').textContent = mode === 'report' ? '➕' : '✋';
+  $('patrol-mode-fab').className = `fab fab-mode ${mode}`;
+  $('patrol-mode-fab').title = mode === 'report' ? 'Avbryt ny observation' : 'Sluta markera rutor';
+  $('patrol-mode-fab').setAttribute('aria-label', $('patrol-mode-fab').title);
+
+  let hint = '';
+  if (patrol.reporting) hint = '➕ Tryck på kartan där djuret är';
+  else if (patrol.manual) hint = `✋ Tryck på rutorna du ser · ${patrol.sessionCells} nya`;
+  else if (weak) hint = patrol.pos ? `📡 Svag GPS (±${Math.round(patrol.pos.accuracy)} m)` : '📡 Söker GPS …';
+  $('patrol-hint').hidden = !hint || !$('patrol-bar').hidden;
+  $('patrol-hint').textContent = hint;
+}
+
 function renderPatrolBar() {
+  if ($('patrol-fab')) renderPatrolFab();
   if (!$('patrol-view') || $('patrol-view').hidden) return;
   const c = patrolCoverage();
   const pct = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
@@ -837,6 +875,7 @@ function initPatrolUI() {
     patrol.manual = !patrol.manual;
     patrol.reporting = false;
     if (patrol.manual) {
+      setPatrolMenu(false);
       if (!patrol.gps) patrol.sessionCells = 0;
       // Zooma in så att rutorna är stora nog att trycka på
       if (patrolMap && patrolMap.getZoom() < 16) patrolMap.setZoom(16);
@@ -846,6 +885,7 @@ function initPatrolUI() {
   $('patrol-report').addEventListener('click', () => {
     patrol.reporting = !patrol.reporting;
     patrol.manual = false;
+    if (patrol.reporting) setPatrolMenu(false);
     renderPatrolBar();
   });
   $('patrol-obs').addEventListener('click', (e) => {
@@ -868,6 +908,7 @@ function initPatrolUI() {
   $('patrol-cfg-save').addEventListener('click', savePatrolConfig);
   $('patrol-cvd').addEventListener('click', () => setPatrolCvd(!patrolCvd));
   $('patrol-pocket').addEventListener('click', openPocket);
+  $('patrol-pocket-fab').addEventListener('click', openPocket);
   // Håll in en sekund för att lämna fickläget
   const exit = $('pocket-exit');
   const startHold = (e) => {
@@ -879,18 +920,16 @@ function initPatrolUI() {
   exit.addEventListener('pointerdown', startHold);
   ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => exit.addEventListener(ev, stopHold));
   exit.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') closePocket(); });
-  // Fäll ihop panelen så att man ser mer av kartan (valet sparas)
-  const setCollapsed = (on) => {
-    $('patrol-bar').classList.toggle('collapsed', on);
-    $('patrol-collapse').setAttribute('aria-expanded', String(!on));
-    $('patrol-collapse').title = on ? 'Visa hela panelen' : 'Fäll ihop';
-    $('patrol-collapse').setAttribute('aria-label', on ? 'Visa hela panelen' : 'Fäll ihop panelen');
-    try { localStorage.setItem(PATROL_COLLAPSED_KEY, on ? '1' : ''); } catch { /* privat läge */ }
-  };
-  let collapsed = false;
-  try { collapsed = localStorage.getItem(PATROL_COLLAPSED_KEY) === '1'; } catch { /* privat läge */ }
-  setCollapsed(collapsed);
-  $('patrol-collapse').addEventListener('click', () => setCollapsed(!$('patrol-bar').classList.contains('collapsed')));
+  // Menyn: stängd som standard (bara ikoner), ☰ öppnar, ✕ stänger
+  $('patrol-menu').addEventListener('click', () => setPatrolMenu(true));
+  $('patrol-close').addEventListener('click', () => setPatrolMenu(false));
+  $('patrol-gps-fab').addEventListener('click', () => (patrol.gps ? stopPatrolGps() : startPatrolGps()));
+  // Ikonen för läget (✋ eller ➕): tryck = avsluta läget
+  $('patrol-mode-fab').addEventListener('click', () => {
+    patrol.manual = false;
+    patrol.reporting = false;
+    renderPatrolBar();
+  });
   $('patrol-bar').querySelector('.patrol-settings').addEventListener('toggle', (e) => {
     $('patrol-bar').classList.toggle('wide', e.target.open);
   });

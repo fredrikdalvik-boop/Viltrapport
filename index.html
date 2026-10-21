@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600;700&display=swap">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link rel="stylesheet" href="style.css?v=27">
+  <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
 
@@ -32,7 +32,7 @@
   <section id="auth-view" class="auth-view" hidden>
     <div class="auth-col">
       <div class="hero">
-        <img class="hero-img" src="icons/hero.jpg?v=27" width="960" height="960"
+        <img class="hero-img" src="icons/hero.jpg?v=29" width="960" height="960"
              alt="Två jägare med gevär sitter i granskogen i solnedgången med en beagle och en svart labrador. Skylt: Charlies mega-ultra-viltrapport-app">
         <!-- Namnet står på bilden. Texten finns kvar för skärmläsare och fylls i från CONFIG.APP_NAME i config.js -->
         <h1 class="hero-title visually-hidden">
@@ -159,7 +159,7 @@
   <div id="app-view" hidden>
     <header class="topbar">
       <div class="brand">
-        <img class="brand-logo" src="icons/logo.jpg?v=27" alt="" width="64" height="42">
+        <img class="brand-logo" src="icons/logo.jpg?v=29" alt="" width="64" height="42">
         <span class="brand-text">
           <span class="brand-kicker" data-app-name="line1">Charlies</span>
           <span class="brand-name" data-app-name="rest">mega-ultra-viltrapport-app</span>
@@ -203,10 +203,19 @@
       <section id="patrol-view" class="view" hidden>
         <div id="patrol-map"></div>
         <!-- Panelen längst ner (resten under "Mer") -->
-        <div id="patrol-bar" class="patrol-bar">
+        <!-- Stängd meny: bara ikoner. GPS-ikonen visar om GPS:en är igång. -->
+        <div id="patrol-fab" class="patrol-fab">
+          <button type="button" id="patrol-menu" class="fab" aria-expanded="false" aria-controls="patrol-bar" title="Öppna menyn" aria-label="Öppna ronderingsmenyn">☰</button>
+          <button type="button" id="patrol-gps-fab" class="fab fab-gps" aria-pressed="false" title="Starta GPS" aria-label="Starta GPS">📡<span id="patrol-gps-count" class="fab-badge" hidden></span></button>
+          <button type="button" id="patrol-mode-fab" class="fab fab-mode" hidden></button>
+          <button type="button" id="patrol-pocket-fab" class="fab" hidden title="Fickläge: svart skärm, GPS:en fortsätter" aria-label="Fickläge">🌙</button>
+        </div>
+        <p id="patrol-hint" class="patrol-hint" role="status" hidden></p>
+
+        <div id="patrol-bar" class="patrol-bar" hidden>
           <div class="patrol-head">
             <p id="patrol-status" class="patrol-status" role="status"></p>
-            <button type="button" id="patrol-collapse" class="patrol-collapse" aria-expanded="true" aria-label="Fäll ihop panelen" title="Fäll ihop">⌃</button>
+            <button type="button" id="patrol-close" class="patrol-collapse" aria-label="Stäng menyn" title="Stäng menyn">✕</button>
           </div>
           <p id="patrol-warning" class="message" role="alert" hidden></p>
           <p id="patrol-queue" class="hint" hidden></p>
@@ -578,11 +587,11 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=27"></script>
-  <script src="species.js?v=27"></script>
-  <script src="risk.js?v=27"></script>
-  <script src="weather.js?v=27"></script>
-  <script src="patrol.js?v=27"></script>
-  <script src="app.js?v=27"></script>
+  <script src="config.js?v=29"></script>
+  <script src="species.js?v=29"></script>
+  <script src="risk.js?v=29"></script>
+  <script src="weather.js?v=29"></script>
+  <script src="patrol.js?v=29"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>

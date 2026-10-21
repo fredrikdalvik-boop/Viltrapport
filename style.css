@@ -1283,11 +1283,6 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
   line-height: 1;
   cursor: pointer;
 }
-.patrol-bar.collapsed .patrol-collapse { transform: rotate(180deg); }
-.patrol-bar.collapsed > :not(.patrol-head):not(.patrol-buttons) { display: none; }
-.patrol-bar.collapsed #patrol-center { display: none; }
-.patrol-bar.collapsed .patrol-status { font-size: 12.5px; font-weight: 600; }
-.patrol-bar.collapsed .patrol-buttons .btn { min-height: 42px; }
 
 /* Mobil: tätare topp och flikrad */
 @media (max-width: 799px) {
@@ -1374,7 +1369,6 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
   cursor: pointer;
 }
 .patrol-chip.selected { border-color: #0072b2; background: #0072b2; color: #fff; }
-.patrol-bar.collapsed #patrol-pocket { display: block; }
 
 /* Fickläge: svart skärm (drar lite ström på mobiler med OLED-skärm) */
 .pocket {
@@ -1434,3 +1428,83 @@ label.check input { width: 22px; height: 22px; flex: none; accent-color: var(--g
 .dialog p { margin: 0 0 14px; line-height: 1.45; }
 .dialog-buttons { display: flex; gap: 10px; }
 .dialog-buttons .btn { flex: 1; margin-top: 0; }
+
+/* Rondering: ikoner när menyn är stängd */
+.patrol-fab {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fab {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 24px;
+  line-height: 1;
+  box-shadow: 0 2px 10px var(--shadow);
+  cursor: pointer;
+}
+/* GPS av = grå, igång = grön med puls, svag signal = gul */
+.fab-gps { filter: grayscale(1); opacity: 0.85; }
+.fab-gps.on, .fab-gps.weak { filter: none; opacity: 1; color: #fff; }
+.fab-gps.on { background: var(--green); }
+.fab-gps.weak { background: #e6a100; }
+.fab-gps.on::after, .fab-gps.weak::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 3px solid currentColor;
+  opacity: 0;
+  animation: gps-pulse 2s ease-out infinite;
+}
+.fab-gps.on::after { border-color: var(--green); }
+.fab-gps.weak::after { border-color: #e6a100; }
+@keyframes gps-pulse { 0% { transform: scale(0.9); opacity: 0.8; } 100% { transform: scale(1.35); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .fab-gps::after { animation: none !important; opacity: 0.5 !important; } }
+.fab-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--green-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 22px;
+  box-shadow: 0 1px 4px var(--shadow);
+}
+.fab-mode.manual { background: #1565c0; color: #fff; }
+.fab-mode.report { background: var(--orange); color: #fff; }
+
+/* Kort text högst upp när man är i ett läge */
+.patrol-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 850;
+  max-width: calc(100% - 150px);
+  margin: 0;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--overlay);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 2px 8px var(--shadow);
+  pointer-events: none;
+}
